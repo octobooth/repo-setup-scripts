@@ -17,9 +17,9 @@ Running it outside `octobooth`: [docs/run-in-your-own-org.md](docs/run-in-your-o
 
 ## Branches and releases
 
-Current migration state: [README: Releases](README.md#releases). The [old release process](docs/releasing.md) is historical reference, not a destination release instruction.
+Current migration state: [README: Releases](README.md#releases). The [destination release process](docs/releasing.md) describes future publication after separate authorization and paired Mac/Windows validation; it does not imply a migration-ready release exists.
 
-- The destination migration updates `main` only. GitHub Actions remain disabled, including CI and scheduled cleanup. Run available checks locally; enabling Actions is separate work.
+- The destination migration updates `main` only. CI is enabled; New demo and Clean up demos remain disabled. Run available checks locally as well, and do not dispatch duplicate CI or enable ChatOps as a validation shortcut.
 - Existing `v1` and immutable version tags retain historical source-oriented content. Do not treat them as migrated destination releases or move them as part of this migration.
 - No destination release or assets are published by this change. Machine rollout and paired release testing with [machine-setup](https://github.com/octobooth/machine-setup) require separate approval.
 - Never move or delete a pushed `vX.Y.Z` tag.

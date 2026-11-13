@@ -3,7 +3,7 @@
 Create demo repositories (private unless a template says otherwise) from the templates in [`config.json`](config.json), with optional branches, issues, demo pull requests, security features, and Codespaces.
 
 > [!IMPORTANT]
-> Migration state: [octobooth/repo-setup-scripts](https://github.com/octobooth/repo-setup-scripts) `main` targets `octobooth`. GitHub Actions remain disabled, so CI, ChatOps, and scheduled cleanup do not run. Existing tags are historical and may still target the read-only source organization; this change does not publish a destination release or assets. Template access varies, including internal repositories. Validate access and required org features before a separately approved live demo.
+> Migration state: [octobooth/repo-setup-scripts](https://github.com/octobooth/repo-setup-scripts) `main` targets `octobooth`. CI is enabled, while New demo and Clean up demos remain disabled. Existing tags are historical and may still target the read-only source organization; this change does not publish a migration-ready destination release or assets. Template access varies, including internal repositories. Validate access and required org features before a separately approved live demo.
 
 There are three ways to create a demo, and all of them run the same scripts and config:
 
@@ -68,13 +68,13 @@ Two demos take too long to create in front of visitors, so create them ahead of 
 - **AI Security** (`ai-security`): about 20 minutes ([checklist](resources/ai-security/ANSWER_KEY.md)).
 - **Security Supply Chain (v4)** (`security-octo-supply-v4`): about 10 minutes ([checklist](resources/security-octo-supply-v4/ANSWER_KEY.md)).
 
-When they're ready, bookmark each demo repo in the browser. Then open the same repo URLs on the other booth machines and bookmark them there too, instead of creating the demos again on every machine. Both default to the `octobooth` org. The [nightly cleanup](#which-cleanup-covers-which-repos) is configured for `demo-generated` repos older than 72 hours but does not run while Actions are disabled.
+When they're ready, bookmark each demo repo in the browser. Then open the same repo URLs on the other booth machines and bookmark them there too, instead of creating the demos again on every machine. Both default to the `octobooth` org. The [nightly cleanup](#which-cleanup-covers-which-repos) is configured for `demo-generated` repos older than 72 hours but does not run while the cleanup workflow is disabled.
 
 ## Releases
 
 The destination migration updates `main` only. Existing `v1` and immutable `vX.Y.Z` tags retain their original source-oriented content. They are historical snapshots, not evidence that the destination launcher, paired machine setup, release notes, or assets have been published or validated. Do not move or rewrite these tags as part of migration.
 
-The [historical release runbook](docs/releasing.md) records how source releases were paired with machine-setup. Any future destination release requires separate authorization and testing on a booth Mac and Windows machine. The source organization remains read-only.
+The [destination release runbook](docs/releasing.md) documents matching-version publication with [octobooth/machine-setup](https://github.com/octobooth/machine-setup), verified candidate commits, and safe machine updates. Any future destination release requires separate authorization and testing on a booth Mac and Windows machine. No migration-ready release is implied by these instructions. The source organization remains read-only.
 
 The loader and [`install.sh`](.github/extensions/demo-launcher/install.sh) still support detached checkouts. The installed loader is a copy, so after an approved update that changes the [loader](.github/extensions/demo-launcher-loader/extension.mjs), reinstall it from the selected checkout. Its path marker and `DEMO_LAUNCHER_REPO` precedence are unchanged.
 
@@ -82,7 +82,7 @@ The loader and [`install.sh`](.github/extensions/demo-launcher/install.sh) still
 
 ### Update a booth machine
 
-Machine rollout is separate from this code migration. Follow [machine-setup's booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md) for the approved destination revision and account checks. Do not use an old `--ref v1`, `-Ref v1`, or `BOOTH_RELEASE=v1` expecting it to contain these changes. Restart the Copilot app after an approved launcher/loader update (on Windows, quit it from the system tray first).
+Machine rollout is separate from this code migration. Follow [machine-setup's booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md) and the [destination release procedure](docs/releasing.md#making-a-change) for the approved paired version and recorded commit IDs. Verify both checkouts have destination remotes and no uncommitted work, then fetch and check out the approved major tag in machine-setup and run `install-demo-launcher --ref <major>` (`-Ref <major>` on Windows) using that same tag. Re-run `setup` with the same ref if setup/config changed. Verify both installed commits match the release record and restart the Copilot app (on Windows, quit it from the system tray first). Do not use an old `--ref v1`, `-Ref v1`, or `BOOTH_RELEASE=v1` expecting it to contain these changes; a tag checkout alone also does not reinstall the copied loader.
 
 ## Demos
 
@@ -348,7 +348,7 @@ Deleting repos needs the `delete_repo` scope. The scripts request it when they l
 | Where the demo repo lives | How it gets cleaned up |
 | --- | --- |
 | A booth account (`octobooth-1`, `octobooth-2`, …), the default | Each booth account's private `demo-cleanup` repo owns its separate weekly cleanup; this migration does not change those accounts or workflows. Between runs, use `--cleanup` / `-Cleanup` **on that machine**. Administrative resets are separate work in [`octobooth/admin-tasks`](https://github.com/octobooth/admin-tasks); do not run them as migration checks. See the [booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md). |
-| The `octobooth` org (`--owner octobooth`, ChatOps, `security-octo-supply-v4`, `ai-security`) | The [nightly cleanup](.github/workflows/cleanup-demos.yml) is configured for 08:00 UTC and repos older than 72 hours, but remains disabled with Actions. After separately approved activation, `/cleanup [hours] --confirm` or manual dispatch can clean up sooner; `/cleanup --all --confirm` ignores age. |
+| The `octobooth` org (`--owner octobooth`, ChatOps, `security-octo-supply-v4`, `ai-security`) | The [nightly cleanup](.github/workflows/cleanup-demos.yml) is configured for 08:00 UTC and repos older than 72 hours, but the workflow remains disabled. After separately approved activation, `/cleanup [hours] --confirm` or manual dispatch can clean up sooner; `/cleanup --all --confirm` ignores age. |
 
 **Recommended booth routine (repos in each booth account):**
 
@@ -365,7 +365,7 @@ bash ./create-repo.sh --cleanup
 # or, after the event, remove every demo regardless of age: bash ./create-repo.sh --cleanup --all
 ```
 
-**Org owner override:** add `--owner octobooth` (or `-Owner octobooth`) when creating demos. This requires the booth accounts to be `octobooth` members who are allowed to create repos, including **public** ones (Booth Bingo is public so GitHub Pages works). Do not rely on automatic cleanup while Actions are disabled.
+**Org owner override:** add `--owner octobooth` (or `-Owner octobooth`) when creating demos. This requires the booth accounts to be `octobooth` members who are allowed to create repos, including **public** ones (Booth Bingo is public so GitHub Pages works). Do not rely on automatic cleanup while its workflow is disabled.
 
 ## Workflows and config fields
 
@@ -469,7 +469,7 @@ Run all three (each opens its own `[Fusion - <label>] …` session) and compare 
 
 ## ChatOps
 
-Two workflows in this repo are configured to create and clean up demos without a booth machine running the script. **Actions remain disabled during migration.** The descriptions below apply only after separately approved activation and App setup; changing owner strings does not install an App or configure credentials.
+Two workflows in this repo are configured to create and clean up demos without a booth machine running the script. **New demo and Clean up demos remain disabled; only CI is active.** The descriptions below apply only after separately approved activation and App setup; changing owner strings does not install an App or configure credentials.
 
 - **[New demo](.github/workflows/new-demo.yml)**: run it from the Actions tab and pick a template, or comment `/new-demo <key>` on any issue or PR in this repo. Repos are always created in `octobooth`, because App tokens cannot create repos in personal accounts. It replies with the repo URL and, for stacks, the top PR URL and the game URL (for OctoCart, the pull request list). Only `repo_only`, `blank`, `security_prs`, `stacked_prs`, `code_review_prs`, and `ai_security` templates are allowed, because Codespaces need a user token.
 - **[Clean up demos](.github/workflows/cleanup-demos.yml)**: runs nightly, from the Actions tab (`max_age_hours`, default 72; `dry_run`, default on), or by comment: `/cleanup [hours | --all] [--dry-run | --confirm]`. Comment runs are dry runs unless they include `--confirm`; only the nightly run deletes without opting in. Manual and comment runs need a cutoff of at least 1 hour unless they use the end-of-event override (`--all` in a comment, or the `all` input on the Actions tab), which deletes every demo repo in the org regardless of age and adds a warning to the reply, and the comment must start with exactly `/cleanup`. If some deletions fail, the run continues with the rest, then fails and lists what was and was not deleted. It only deletes repos in `octobooth` that have the `demo-generated` topic **and** are older than the cutoff. It cannot see repos in booth accounts; see [Which cleanup covers which repos](#which-cleanup-covers-which-repos).
@@ -518,6 +518,6 @@ shellcheck --severity=warning -x create-repo.sh .github/extensions/demo-launcher
 Invoke-ScriptAnalyzer -Path .\create-repo.ps1 -Settings .\PSScriptAnalyzerSettings.psd1
 ```
 
-The [CI workflow](.github/workflows/ci.yml) defines these checks for every pull request and push to `main` (the run-store tests on Linux, macOS, and Windows), and also validates `config.json` (required fields, workflow names, and that every referenced resource file and directory exists). CI never creates repos or uses secrets. It does not run while Actions remain disabled; run available checks locally and record missing platform validation.
+The [CI workflow](.github/workflows/ci.yml) runs these checks for every pull request and push to `main` (the run-store tests on Linux, macOS, and Windows), and also validates `config.json` (required fields, workflow names, and that every referenced resource file and directory exists). CI never creates repos or uses secrets. CI is enabled while the two ChatOps workflows remain disabled; run available checks locally and record missing platform validation rather than dispatching duplicate CI.
 
 Before changing this repo, read [AGENTS.md](AGENTS.md): the change rules (script parity, Windows PowerShell 5.1, intentional vulnerabilities to leave alone) and release rules for maintainers and coding agents.

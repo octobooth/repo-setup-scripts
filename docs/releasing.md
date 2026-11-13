@@ -1,43 +1,47 @@
 # Releasing
 
 > [!IMPORTANT]
-> Historical runbook: the process and commands below describe releases from [octobooth-demos](https://github.com/octobooth-demos), which is read-only during migration. Do not execute these publication commands against the source. The destination migration changes [octobooth/repo-setup-scripts](https://github.com/octobooth/repo-setup-scripts) `main` only, while Actions remain disabled. Existing tags retain their original source-oriented content; no destination `v1`, release, or assets are newly published by this migration. Future release work needs separate authorization and Mac/Windows validation. See [the current migration state](../README.md#releases).
+> This is the destination release procedure for [octobooth/repo-setup-scripts](https://github.com/octobooth/repo-setup-scripts) and [octobooth/machine-setup](https://github.com/octobooth/machine-setup). Publication and machine rollout require separate authorization; the migration changes `main` only and does not publish a migration-ready `v1`, release, or assets. Existing tags retain their original source-oriented content until a separately approved release updates the matching major tag; immutable version tags must never be rewritten. The source organization remains read-only. CI is enabled on this destination, but New demo and Clean up demos remain disabled. See [the current migration state](../README.md#releases).
 
-## Historical release process
+## Destination release process
 
-Releases use semantic version tags, with the **same version on both** this repo and [octobooth-demos/machine-setup](https://github.com/octobooth-demos/machine-setup):
+Releases use semantic version tags, with the **same version on both** this repo and [octobooth/machine-setup](https://github.com/octobooth/machine-setup):
 
 - Each tested release gets a full tag, `vX.Y.Z` (for example `v1.0.0`).
-- A moving major tag (`v1`) always points at the latest tested `v1.x.y`, like GitHub Actions' major tags. Booth machines use the major tag. [octobooth-demos/octocat-supply-reusable-workflows](https://github.com/octobooth-demos/octocat-supply-reusable-workflows) uses the same pattern (`@v1`).
+- For an approved release, move the matching major tag (`v1` for `v1.x.y`) to the tested commit, like GitHub Actions' major tags. Booth machines can then use that approved major tag. A pre-existing tag name alone is not evidence that the destination migration was tested or released.
 - Bump the major (`v2`) only for breaking changes, for example new manual setup steps, changed paths, or new required `gh` scopes. Otherwise bump the minor for new demos or features and the patch for fixes.
 
 See [Releases](../README.md#releases) for how booth machines use the tags.
 
 ## Making a change
 
-How a change gets from a PR to the booth machines. Booth machines run `v1`, not `main`, so merging never changes them; only moving `v1` does. The commands for steps 4 to 7 are in [Cutting a release](#cutting-a-release).
+How a change gets from a PR to the booth machines after release work is authorized. Machines pinned to a release tag do not pick up a `main` merge; they need the approved tag and an explicit update. The commands for steps 4 to 7 are in [Cutting a release](#cutting-a-release). Do not use the historical `v1` as the migration-ready release.
 
 1. **Open a PR to `main`** in this repo or machine-setup.
 2. **Wait for CI and Copilot code review**, and fix what they find.
-3. **Merge.** `main` is now ahead of `v1`. Booth machines aren't affected.
+3. **Merge.** `main` now contains the candidate change. Machines pinned to a release tag aren't affected.
 4. **Test `main` on a booth Mac and a Windows machine** ([step 1](#cutting-a-release)): clear `BOOTH_RELEASE`, put both checkouts on `main`, run machine-setup's `install-demo-launcher` **without** a ref, run the demos, and record both commit IDs. You can batch several merged PRs into one release.
 5. **Tag both repos at the tested commits** ([step 2](#cutting-a-release)), with the same version, even if only one repo changed, so the versions stay paired. Bump the patch (`v1.0.x`) for fixes and the minor (`v1.x.0`) for new demos or features.
-6. **Move `v1`** to the same commits ([step 3](#cutting-a-release)).
+6. **Move the matching major tag** to the same commits ([step 3](#cutting-a-release)).
 7. **Create the GitHub Releases** on both repos with `--generate-notes --verify-tag` ([step 4](#cutting-a-release)).
-8. **Update the booth machines:** fetch and check out `v1` in machine-setup, run `install-demo-launcher --ref v1` (`-Ref v1` on Windows), and restart the Copilot app. See [Update a booth machine](../README.md#update-a-booth-machine).
+8. **Update the booth machines:** verify destination remotes, fetch and check out the approved major tag in machine-setup, run `install-demo-launcher --ref <major>` (`-Ref <major>` on Windows) with the same tag, verify both installed commits match the release record, and restart the Copilot app. See [Update a booth machine](../README.md#update-a-booth-machine). Never update by checking out a tag alone when the loader or setup changed.
 
-Steps 5 to 7 in one block, run from clones where you can push to both repos (not necessarily the booth machine). Fill in the version and the two commit IDs you recorded in step 4:
+Steps 5 to 7 in one block, run only after release authorization from destination clones where you can push to both repos (not necessarily the booth machine). Fill in an unused version, its matching major, and the two commit IDs you recorded in step 4. The example version below is not a claim that it is available or migration-ready:
 
 ```bash
 VERSION=v1.0.1                 # the new version
 MAJOR=v1                       # its major: v1 for any v1.x.y
 BRANCH=main                    # or release/vN for a hotfix on an older major
 LATEST=true                    # false for a hotfix on an older major, so it doesn't become "Latest"
-MS=~/repos/machine-setup       # your clone of machine-setup
-RSS=~/repos/repo-setup-scripts # your clone of repo-setup-scripts
+MS=~/repos/machine-setup       # clone of octobooth/machine-setup
+RSS=~/repos/repo-setup-scripts # clone of octobooth/repo-setup-scripts
 MS_SHA=PASTE_MACHINE_SETUP_SHA     # recorded in step 4
 RSS_SHA=PASTE_REPO_SETUP_SCRIPTS_SHA # recorded in step 4
 
+test "$(git -C "$MS" remote get-url origin)" = "https://github.com/octobooth/machine-setup.git" &&
+test "$(git -C "$MS" remote get-url --push origin)" = "https://github.com/octobooth/machine-setup.git" &&
+test "$(git -C "$RSS" remote get-url origin)" = "https://github.com/octobooth/repo-setup-scripts.git" &&
+test "$(git -C "$RSS" remote get-url --push origin)" = "https://github.com/octobooth/repo-setup-scripts.git" &&
 git -C "$MS" fetch origin --tags --force &&
 git -C "$RSS" fetch origin --tags --force &&
 git -C "$MS" merge-base --is-ancestor "$MS_SHA" "origin/$BRANCH" &&
@@ -50,19 +54,19 @@ git -C "$MS" push origin "$VERSION" &&
 git -C "$RSS" push origin "$VERSION" &&
 git -C "$MS" push origin "$MAJOR" --force &&
 git -C "$RSS" push origin "$MAJOR" --force &&
-gh release create "$VERSION" -R octobooth-demos/machine-setup --generate-notes --verify-tag --latest="$LATEST" &&
-gh release create "$VERSION" -R octobooth-demos/repo-setup-scripts --generate-notes --verify-tag --latest="$LATEST"
+gh release create "$VERSION" -R octobooth/machine-setup --generate-notes --verify-tag --latest="$LATEST" &&
+gh release create "$VERSION" -R octobooth/repo-setup-scripts --generate-notes --verify-tag --latest="$LATEST"
 ```
 
-The `merge-base` check stops if a commit isn't on the branch you tested. Nothing is pushed until both repos are checked and tagged locally. If a later step fails, fix it and run the remaining commands; `git tag -a` refuses to overwrite a `vX.Y.Z` tag that already exists. Never move or delete a pushed `vX.Y.Z` tag.
+The remote checks stop this HTTPS-clone example from publishing to the source organization or a fork. The `merge-base` check stops if a commit isn't on the branch you tested. Nothing is pushed until both repos are checked and tagged locally. If a later step fails, inspect the remote state before resuming; `git tag -a` refuses to overwrite a `vX.Y.Z` tag that already exists. Never move or delete a pushed `vX.Y.Z` tag. The major-tag updates shown here are future release operations, not part of migration.
 
 ### What booth machines need for each kind of change
 
 | Change | On booth machines |
 | --- | --- |
-| Demo Launcher, `config.json`, or `create-repo` scripts | Only the `v1` update in step 8. |
+| Demo Launcher, `config.json`, or `create-repo` scripts | The approved major-tag update in step 8. |
 | Loader (`.github/extensions/demo-launcher-loader/`) or `install.sh` | The same update. It reinstalls the loader, because `install-demo-launcher` always re-runs `install.sh`. Say so in the release notes, and don't update by hand with `git checkout` alone. |
-| machine-setup's `config.json` or `setup` scripts (new apps, extensions, or repos) | The `v1` update, then `setup` again with the same release (`bash setup.sh --ref v1` or `.\setup.ps1 -Ref v1`). See machine-setup's [booth playbook](https://github.com/octobooth-demos/machine-setup/blob/main/docs/booth-playbook.md). |
+| machine-setup's `config.json` or `setup` scripts (new apps, extensions, or repos) | The approved major-tag update, then `setup` again with the same release (`bash setup.sh --ref <major>` or `.\setup.ps1 -Ref <major>`). See machine-setup's [booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md). |
 | A template repo | Nothing, and no release. Templates can't be pinned, so a merged template change reaches every new demo right away, on every machine. Test it in the template repo's PR before merging, then create one demo from it right after merging. |
 
 ### When to bump to `v2`
@@ -71,7 +75,7 @@ Only for breaking changes: anything a booth machine can't pick up from the `v1` 
 
 ## Cutting a release
 
-1. **Test the candidate commits, with machine-setup applied.** The candidate is `main` of both repos, or a `release/vN` branch for a hotfix (step 5). On a booth Mac and a Windows machine:
+1. **Test the candidate commits, with machine-setup applied.** The candidate is `main` of both destination repos, or a `release/vN` branch for a hotfix (step 5). Before running any update or publication commands, verify each checkout's fetch and push `origin` points to its `octobooth` destination, as in the checks above. Use clean checkouts; do not overwrite local work. On a booth Mac and a Windows machine:
 
    1. Make sure no release is set, so the installer doesn't pin an older tag: `unset BOOTH_RELEASE` (macOS) or `Remove-Item Env:BOOTH_RELEASE -ErrorAction SilentlyContinue` (Windows).
    2. Put both checkouts on the candidate branch and update them:
@@ -89,14 +93,15 @@ Only for breaking changes: anything a booth machine can't pick up from the `v1` 
       git -C ~/repos/repo-setup-scripts rev-parse HEAD
       ```
 
-   5. Restart the Copilot app and run these from the Demo Launcher: `security-octo-supply-v4`, `ai-security`, and one demo that creates its repo in the booth account (for example `booth-bingo`).
+   5. Restart the Copilot app and, as separately authorized release validation, run these from the Demo Launcher: `security-octo-supply-v4`, `ai-security`, and one demo that creates its repo in the booth account (for example `booth-bingo`). Confirm destination template/reusable-workflow access and required security features for the booth account. Do not enable ChatOps or scheduled cleanup for this check.
    6. Run the two `rev-parse` commands again. If either changed, or differs between the Mac and Windows machine, start over with the new commits.
 
-2. **Tag the recorded commits, with the same version on both repos.** Tag the exact SHAs from step 1, not whatever the branch points at now:
+2. **Tag the recorded commits, with the same version on both repos.** In each verified destination checkout, tag the exact SHA from step 1, not whatever the branch points at now. Verify that commit is on the tested branch before tagging:
 
    ```bash
-   git fetch origin --tags --force
-   git tag -a vX.Y.Z <recorded-sha> -m "vX.Y.Z"
+   git fetch origin --tags --force &&
+   git merge-base --is-ancestor <recorded-sha> origin/<tested-branch> &&
+   git tag -a vX.Y.Z <recorded-sha> -m "vX.Y.Z" &&
    git push origin vX.Y.Z
    ```
 
@@ -108,10 +113,11 @@ Only for breaking changes: anything a booth machine can't pick up from the `v1` 
    ```
 
    Booth machines on `vX` pick it up the next time they update (see [Update a booth machine](../README.md#update-a-booth-machine)).
-4. **Create the GitHub Release on both repos**, from the pushed tag:
+4. **Create the GitHub Release on both destination repos**, from the pushed matching version tag:
 
    ```bash
-   gh release create vX.Y.Z --generate-notes --verify-tag
+   gh release create vX.Y.Z -R octobooth/machine-setup --generate-notes --verify-tag
+   gh release create vX.Y.Z -R octobooth/repo-setup-scripts --generate-notes --verify-tag
    ```
 
    `--verify-tag` stops if the tag isn't on GitHub, instead of creating it from the default branch. If the release changes the loader (`.github/extensions/demo-launcher-loader/`) or `install.sh`, add `--notes "Booth machines must re-run install-demo-launcher after updating."` (it goes above the generated notes).

@@ -1,6 +1,6 @@
 # Run the Demo Launcher in your own org
 
-This repo is built for the [`octobooth`](https://github.com/octobooth) org and its booth accounts (`octobooth-1`, `octobooth-2`, …), but nothing in the Demo Launcher or `create-repo` requires those identities. Org settings live in [`config.json`](../config.json), plus the ChatOps workflows, loader diagnostics, and tests listed under [Currently hard-coded](#currently-hard-coded). This guide shows how to install the launcher on your own machine, point it at your org or personal account, and add demos of your own. The destination migration updates `main` only, leaves Actions disabled, and does not publish new releases or assets; see [Releases](../README.md#releases).
+This repo is built for the [`octobooth`](https://github.com/octobooth) org and its booth accounts (`octobooth-1`, `octobooth-2`, …), but nothing in the Demo Launcher or `create-repo` requires those identities. Org settings live in [`config.json`](../config.json), plus the ChatOps workflows, loader diagnostics, and tests listed under [Currently hard-coded](#currently-hard-coded). This guide shows how to install the launcher on your own machine, point it at your org or personal account, and add demos of your own. The destination migration updates `main` only and does not publish new releases or assets; CI is enabled, while New demo and Clean up demos remain disabled. See [Releases](../README.md#releases).
 
 - [Quick start](#quick-start)
 - [Installing the Demo Launcher canvas: options and limitations](#installing-the-demo-launcher-canvas-options-and-limitations)
@@ -194,7 +194,7 @@ The account that runs the script needs permission to create repos in the target 
 
 ### ChatOps (optional)
 
-[`new-demo.yml`](../.github/workflows/new-demo.yml) and [`cleanup-demos.yml`](../.github/workflows/cleanup-demos.yml) are configured to create and clean up demos in an org from GitHub Actions, without a presenter machine. You don't need them to use the launcher. Actions remain disabled on the destination during migration. Activation and App setup require separate approval; do not enable these workflows just to test migration changes. In your own fork, leave these two disabled unless you set them up, even if you enable CI.
+[`new-demo.yml`](../.github/workflows/new-demo.yml) and [`cleanup-demos.yml`](../.github/workflows/cleanup-demos.yml) are configured to create and clean up demos in an org from GitHub Actions, without a presenter machine. You don't need them to use the launcher. Only CI is active on the destination; these two workflows remain disabled. Their activation and App setup require separate approval; do not enable them just to test migration changes. In your own fork, leave these two disabled unless you set them up, even if you enable CI.
 
 To set them up:
 
@@ -211,7 +211,7 @@ ChatOps always creates repos in the org, because App tokens can't create repos i
 Every repo the scripts create gets the `demo-generated` topic. Cleanup only deletes repos that have it **and** are older than the cutoff (72 hours by default):
 
 - **Any owner:** the launcher's **Clean up** section, or `bash ./create-repo.sh --cleanup [--owner <name>]`. Needs the `delete_repo` scope.
-- **Your org, automatically:** `cleanup-demos.yml` is configured for 08:00 UTC once ChatOps is set up and separately enabled. It does not run on the destination while Actions are disabled.
+- **Your org, automatically:** `cleanup-demos.yml` is configured for 08:00 UTC once ChatOps is set up and separately enabled. It does not run on the destination while that workflow is disabled.
 - **Personal accounts:** nothing in this repo reaches them on a schedule. Run `--cleanup` on each machine, or add a scheduled workflow in each account (the `octobooth-*` accounts use a private `demo-cleanup` repo for this).
 
 ### Presenter machines and machine-setup
