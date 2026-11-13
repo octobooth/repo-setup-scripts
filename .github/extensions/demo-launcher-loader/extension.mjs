@@ -42,14 +42,14 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt
 async function showSetupError(problem) {
     const { joinSession, createCanvas } = await import("@github/copilot-sdk/extension");
     const message =
-        `${problem} Clone octobooth-demos/repo-setup-scripts to ${repoRoot} ` +
+        `${problem} Clone octobooth/repo-setup-scripts to ${repoRoot} ` +
         "(or set DEMO_LAUNCHER_REPO to your checkout), then restart the Copilot app.";
     const html = `<!doctype html><meta charset="utf-8"><title>Demo Launcher</title>
 <body style="font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5">
 <h2>Demo Launcher isn't set up yet</h2>
 <p>${escapeHtml(problem)}</p>
 <p>Clone the launcher's repo to the path this loader expects, then restart the Copilot app:</p>
-<pre style="white-space: pre-wrap">gh repo clone octobooth-demos/repo-setup-scripts "${escapeHtml(repoRoot)}"</pre>
+<pre style="white-space: pre-wrap">gh repo clone octobooth/repo-setup-scripts "${escapeHtml(repoRoot)}"</pre>
 <p>Or set the <code>DEMO_LAUNCHER_REPO</code> environment variable to an existing checkout.</p>
 </body>`;
     let urlPromise;

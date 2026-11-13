@@ -10,20 +10,19 @@ Public, [MIT](LICENSE). It creates booth demo repos from [`config.json`](config.
 - [`.github/extensions/demo-launcher/`](.github/extensions/demo-launcher/): the **Demo Launcher** canvas extension for the GitHub Copilot app. It runs `create-repo` in the background and parses its output. Docs: [README: Demo Launcher canvas](README.md#demo-launcher-canvas).
 - [`.github/extensions/demo-launcher-loader/`](.github/extensions/demo-launcher-loader/): the user-level loader, installable from a URL or written by `install.sh`. Docs: [loader README](.github/extensions/demo-launcher-loader/README.md).
 - [`resources/<demo>/`](resources/): per-demo PR contents, seeds, seed prompts, and presenter answer keys (`ANSWER_KEY.md`, never copied into demo repos).
-- [`templates/booth-bingo/`](templates/booth-bingo/): source for the `octobooth-demos/booth-bingo` template repo.
+- [`templates/booth-bingo/`](templates/booth-bingo/): source for the [`octobooth/booth-bingo`](https://github.com/octobooth/booth-bingo) template repo.
 - ChatOps: [`new-demo.yml`](.github/workflows/new-demo.yml) and [`cleanup-demos.yml`](.github/workflows/cleanup-demos.yml). See [README: ChatOps](README.md#chatops).
 
-Running it outside `octobooth-demos`: [docs/run-in-your-own-org.md](docs/run-in-your-own-org.md).
+Running it outside `octobooth`: [docs/run-in-your-own-org.md](docs/run-in-your-own-org.md).
 
 ## Branches and releases
 
-Full process: [docs/releasing.md](docs/releasing.md) ([Making a change](docs/releasing.md#making-a-change), [Cutting a release](docs/releasing.md#cutting-a-release)) and [README: Releases](README.md#releases).
+Current migration state: [README: Releases](README.md#releases). The [old release process](docs/releasing.md) is historical reference, not a destination release instruction.
 
-- Changes land on `main` through PRs, and are tested there. Maintainer and dev machines track `main`.
-- Booth machines run the moving major tag `v1`, installed by [machine-setup](https://github.com/octobooth-demos/machine-setup) (`--ref v1`, `-Ref v1`, or `BOOTH_RELEASE=v1`). **Merging never changes booth machines; only moving `v1` after testing does.**
-- Each release tags this repo and machine-setup with the **same** `vX.Y.Z`, at the commits tested on a booth Mac and a Windows machine, then moves the matching major tag (`v1` for any `v1.y.z`).
-- Patch for fixes, minor for new demos or behavior, major (`v2`) only for breaking setup changes (new manual steps, changed paths, new `gh` scopes).
-- Never move or delete a pushed `vX.Y.Z` tag; cut a new one. Never move `v1` to a `v2.x.y` commit.
+- The destination migration updates `main` only. GitHub Actions remain disabled, including CI and scheduled cleanup. Run available checks locally; enabling Actions is separate work.
+- Existing `v1` and immutable version tags retain historical source-oriented content. Do not treat them as migrated destination releases or move them as part of this migration.
+- No destination release or assets are published by this change. Machine rollout and paired release testing with [machine-setup](https://github.com/octobooth/machine-setup) require separate approval.
+- Never move or delete a pushed `vX.Y.Z` tag.
 - **Agents:** don't create, move, or delete tags, or publish GitHub Releases, unless a maintainer explicitly asks.
 
 ## Change rules
@@ -51,7 +50,7 @@ Template repos can't be pinned: GitHub always creates repos from a template's de
 
 ## Where repos go
 
-Only `security-octo-supply-v4` and `ai-security` (`"owner": "org"`) create repos in the `octobooth-demos` org; every other demo uses the signed-in `gh` account, unless `--owner` / `-Owner` is passed. ChatOps always uses the org. See [README: Where repos are created](README.md#where-repos-are-created).
+Only `security-octo-supply-v4` and `ai-security` (`"owner": "org"`) create repos in the `octobooth` org; every other demo uses the signed-in `gh` account, unless `--owner` / `-Owner` is passed. ChatOps targets the org but remains disabled during migration. Template access varies by repository; do not assume every template is public. See [README: Where repos are created](README.md#where-repos-are-created).
 
 Booth machines use the booth account for both the Copilot app and `gh`. Never sign in with personal or staff accounts on booth machines.
 
@@ -77,7 +76,7 @@ End to end (creates a real repo in the signed-in account, or the org for org-pin
 DEMO_NO_BROWSER=1 bash create-repo.sh --template <key> --no-clone
 ```
 
-Clean up afterwards: delete just your test repo with `gh repo delete <owner>/<repo> --yes` or the launcher's **Clean up** section. Every demo repo gets the `demo-generated` topic, and `create-repo.sh --cleanup` / `-Cleanup` deletes those older than 72 hours (always `--dry-run` first). `--all` or `--older-than 0` deletes **every** demo the owner has, including ones in use, so don't run them on `octobooth-demos` or a booth account during an event. See [README: Cleaning up](README.md#cleaning-up).
+Live demos and cleanup are not migration validation; run them only when separately authorized. Every demo repo gets the `demo-generated` topic, and `create-repo.sh --cleanup` / `-Cleanup` deletes those older than 72 hours (always `--dry-run` first). `--all` or `--older-than 0` deletes **every** demo the owner has, including ones in use, so don't run them on `octobooth` or a booth account during an event. See [README: Cleaning up](README.md#cleaning-up).
 
 ## Launcher gotchas
 

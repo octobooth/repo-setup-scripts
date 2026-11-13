@@ -86,7 +86,7 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: octobooth-demos
+          owner: octobooth
 
       - name: Create demo repository
         id: create
@@ -99,7 +99,7 @@ jobs:
           git config --global user.name "${APP_SLUG}[bot]"
           git config --global user.email "${APP_SLUG}[bot]@users.noreply.github.com"
           # App tokens cannot create repos in personal accounts, so ChatOps always targets the org.
-          bash ./create-repo.sh --template "$TEMPLATE_KEY" --no-clone --owner octobooth-demos
+          bash ./create-repo.sh --template "$TEMPLATE_KEY" --no-clone --owner octobooth
 
       - name: Comment result
         if: always() && github.event_name == 'issue_comment'

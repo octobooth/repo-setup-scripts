@@ -1,6 +1,6 @@
 # Run the Demo Launcher in your own org
 
-This repo is built for the `octobooth-demos` org and its booth accounts (`octobooth-1`, `octobooth-2`, …), but nothing in the Demo Launcher or `create-repo` is tied to them. Everything org-specific lives in [`config.json`](../config.json), plus a few spots in the ChatOps workflows and tests listed under [Currently hard-coded](#currently-hard-coded). This guide shows how to install the launcher on your own machine, point it at your org or personal account, and add demos of your own.
+This repo is built for the [`octobooth`](https://github.com/octobooth) org and its booth accounts (`octobooth-1`, `octobooth-2`, …), but nothing in the Demo Launcher or `create-repo` requires those identities. Org settings live in [`config.json`](../config.json), plus the ChatOps workflows, loader diagnostics, and tests listed under [Currently hard-coded](#currently-hard-coded). This guide shows how to install the launcher on your own machine, point it at your org or personal account, and add demos of your own. The destination migration updates `main` only, leaves Actions disabled, and does not publish new releases or assets; see [Releases](../README.md#releases).
 
 - [Quick start](#quick-start)
 - [Installing the Demo Launcher canvas: options and limitations](#installing-the-demo-launcher-canvas-options-and-limitations)
@@ -12,7 +12,7 @@ This repo is built for the `octobooth-demos` org and its booth accounts (`octobo
 
 ## Quick start
 
-You can try the launcher with no config changes. The templates are public, so most demos work from any GitHub account.
+You can use the launcher with no config changes if your account can access the selected template and create repos under its target owner. Not all destination templates are public: `tailspin-toys` and `security-octo-supply` are internal. Use a template you can access, copy one into your own org, or choose `fusion-blank`, which has no template.
 
 1. **Install the tools and log in.** The launcher runs `create-repo` with your `gh` login, so it needs the [GitHub CLI](https://cli.github.com/) and Git on your `PATH`, plus [`jq`](https://jqlang.org/) on macOS and Linux:
 
@@ -32,7 +32,7 @@ You can try the launcher with no config changes. The templates are public, so mo
 
 3. **Install the launcher from a URL.** In a Copilot app chat, ask:
 
-   > Install the extension from https://github.com/octobooth-demos/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader
+   > Install the extension from [octobooth/repo-setup-scripts's loader](https://github.com/octobooth/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader).
 
    For your fork, use your fork's URL. This works on Windows, macOS, and Linux with no script to run, and makes the launcher available in any chat, including a blank new one. It loads the launcher from the clone in step 2, so keep it at `~/repos/repo-setup-scripts` (`%USERPROFILE%\repos\repo-setup-scripts` on Windows) or set `DEMO_LAUNCHER_REPO`. Prefer a script? See [Option B](#option-b-install-script), but [don't use both](#dont-use-both).
 
@@ -40,9 +40,9 @@ You can try the launcher with no config changes. The templates are public, so mo
 
 4. **Restart the Copilot app.** Extensions only load at startup (or when you ask Copilot to reload extensions).
 5. **Open it.** In any chat, ask Copilot to **"open the demo launcher."**
-6. **Create a demo.** Pick **Booth Bingo** or **Ctrl Slash** and click **Create**. The repo is created in your logged-in account from the public template in `octobooth-demos`.
+6. **Create a demo.** Once live use is approved, pick **Booth Bingo** or **Ctrl Slash** and click **Create**. The repo is created in your logged-in account from the selected template in `octobooth`.
 
-With an unchanged `config.json`, these demos work in your own account: `securing-your-code`, `ctrl-slash`, `booth-bingo`, `octocart`, `tailspin-toys`, `fusion-blank`, and `fusion-routing` (subject to the [features each one needs](#reference-what-each-demo-needs)). `security-octo-supply-v4` and `ai-security` fail, because they're pinned to the `octobooth-demos` org. To fix that, [point the config at your org](#point-it-at-your-org).
+With an unchanged `config.json`, these demos target your own account: `securing-your-code`, `ctrl-slash`, `booth-bingo`, `octocart`, `tailspin-toys`, `fusion-blank`, and `fusion-routing` (subject to template access and the [features each one needs](#reference-what-each-demo-needs)). `security-octo-supply-v4` and `ai-security` target `octobooth` by default and require permission there. To use your own org instead, [point the config at it](#point-it-at-your-org) or pass an explicit owner.
 
 ## Installing the Demo Launcher canvas: options and limitations
 
@@ -66,7 +66,7 @@ In a session whose repo ships its own `.github/extensions/demo-launcher/extensio
 
 In a Copilot app chat, ask (for your fork, use your fork's URL):
 
-> Install the extension from https://github.com/octobooth-demos/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader
+> Install the extension from [octobooth/repo-setup-scripts's loader](https://github.com/octobooth/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader).
 
 Then restart the app. It installs to `~/.copilot/extensions/demo-launcher-loader/`.
 
@@ -99,13 +99,13 @@ Everything the launcher creates is driven by [`config.json`](../config.json). Th
 | Field | What it does | What to change |
 | --- | --- | --- |
 | `org` (top level) | The default template source for every entry, the target for `"owner": "org"`, and the owner for GitHub App tokens (ChatOps) | Your org (or your username) |
-| `template_org` (per demo) | Where that demo's template lives. Falls back to `org` | Leave it out if you copied the template into your org. Set `"template_org": "octobooth-demos"` to keep using our public template |
+| `template_org` (per demo) | Where that demo's template lives. Falls back to `org` | Leave it out if you copied the template into your org. Set `"template_org": "octobooth"` to keep using our template, if your account can access it |
 | `owner` (per demo) | Where the repo is created. `"org"` means the top-level `org`; any other value is used as-is | Use `"org"` for demos that need org features (like Advanced Security). Leave it out to create the repo in whoever is logged in |
 | `codespace_machine` (top level) | The machine type for Tailspin Toys' Codespace | Any machine type your account can use |
 
 `--owner` / `-Owner` (or **Owner** in the launcher) overrides `owner` for a single run. See [Where repos are created](../README.md#where-repos-are-created) for the full order.
 
-**Changing `org` changes where templates come from.** Every entry without `template_org` reads its template from `org`. After you change `org`, either copy the templates into your org (below) or add `"template_org": "octobooth-demos"` to each entry. `securing-your-code` already sets `"template_org": "github-samples"`.
+**Changing `org` changes where templates come from.** Every entry without `template_org` reads its template from `org`. After you change `org`, either copy the templates into your org (below) or add `"template_org": "octobooth"` to each entry whose template you can access. `securing-your-code` already sets `"template_org": "github-samples"`.
 
 For example, to keep our templates and create the security demo in your org:
 
@@ -117,7 +117,7 @@ For example, to keep our templates and create the security demo in your org:
       "key": "security-octo-supply-v4",
       "owner": "org",
       "template": "security-octo-supply-v4",
-      "template_org": "octobooth-demos",
+      "template_org": "octobooth",
       ...
     }
   ]
@@ -130,16 +130,16 @@ For example, to keep our templates and create the security demo in your org:
 - **Demo templates:** we recommend copying the ones you use into your org and leaving out `template_org`. That way, a change to our templates can't break your demos mid-event. To copy one and mark the copy as a template:
 
   ```bash
-  gh repo create my-org/octocart --template octobooth-demos/octocart --public
+  gh repo create my-org/octocart --template octobooth/octocart --public
   gh repo edit my-org/octocart --template
   ```
 
   Repos created from a template aren't templates themselves, so the second command matters. `create-repo` uses `gh repo create --template`, so a template has to be marked as one and visible to whoever runs the script.
 
-  Pointing `template_org` at `octobooth-demos` also works, since all our templates are public.
+  Pointing `template_org` at `octobooth` works only when your account can access the template. Do not assume internal templates can be used from an unrelated account or republished publicly.
 
 - **Demo content in this repo:** PR overlays (`resources/<key>/…`), PR bodies, seed prompts, and the presenter answer keys (`resources/<key>/ANSWER_KEY.md`) live in this repo, not in the templates. Edit them in your fork. OctoCart's PR overlays are written against the template's current app, so copy the template from its latest `main`.
-- **Templates that reference our org:** the `security-octo-supply` and `security-octo-supply-v4` templates call the public `octobooth-demos/octocat-supply-reusable-workflows/.github/workflows/build-publish-containers.yml@v1` reusable workflow. It works as-is from any org. Fork that repo and update the `uses:` lines in your template copies if you'd rather not depend on it.
+- **Templates that reference our org:** inspect the `uses:` lines in the template revision you copy. [`octobooth/octocat-supply-reusable-workflows`](https://github.com/octobooth/octocat-supply-reusable-workflows) is internal, so access and reusable-workflow sharing must be verified; it is not guaranteed to work from any org. Historical template tags can still call the source workflow. Copy and retarget dependencies only with the appropriate access and authorization.
 
 ## Add a demo of your own
 
@@ -194,14 +194,14 @@ The account that runs the script needs permission to create repos in the target 
 
 ### ChatOps (optional)
 
-[`new-demo.yml`](../.github/workflows/new-demo.yml) and [`cleanup-demos.yml`](../.github/workflows/cleanup-demos.yml) create and clean up demos in an org from GitHub Actions, without a presenter machine. You don't need them to use the launcher. GitHub turns workflows off in new forks until you enable them on the **Actions** tab. If you enable Actions for CI, disable these two unless you set them up, because the nightly cleanup fails without the App secrets.
+[`new-demo.yml`](../.github/workflows/new-demo.yml) and [`cleanup-demos.yml`](../.github/workflows/cleanup-demos.yml) are configured to create and clean up demos in an org from GitHub Actions, without a presenter machine. You don't need them to use the launcher. Actions remain disabled on the destination during migration. Activation and App setup require separate approval; do not enable these workflows just to test migration changes. In your own fork, leave these two disabled unless you set them up, even if you enable CI.
 
 To set them up:
 
 1. Create a GitHub App owned by your org, with the repository permissions listed in [GitHub App setup](../README.md#github-app-setup-one-time-org-owner).
 2. Install it on your org with access to **All repositories**.
 3. In your fork's **Settings → Secrets and variables → Actions**, add `APP_ID` and `APP_PRIVATE_KEY`.
-4. Replace `octobooth-demos` with your org in both workflows: `owner:` and `--owner` in `new-demo.yml`, and `ORG:` and `owner:` in `cleanup-demos.yml`. These don't read `config.json`.
+4. Replace `octobooth` with your org in both workflows: `owner:` and `--owner` in `new-demo.yml`, and `ORG:` and `owner:` in `cleanup-demos.yml`. These don't read `config.json`.
 5. Make `new-demo.yml`'s `template` options match the keys in your `config.json`.
 
 ChatOps always creates repos in the org, because App tokens can't create repos in personal accounts, and it can't run `tailspin-toys` (Codespaces need a user token).
@@ -211,28 +211,29 @@ ChatOps always creates repos in the org, because App tokens can't create repos i
 Every repo the scripts create gets the `demo-generated` topic. Cleanup only deletes repos that have it **and** are older than the cutoff (72 hours by default):
 
 - **Any owner:** the launcher's **Clean up** section, or `bash ./create-repo.sh --cleanup [--owner <name>]`. Needs the `delete_repo` scope.
-- **Your org, automatically:** `cleanup-demos.yml` runs nightly at 08:00 UTC once ChatOps is set up.
+- **Your org, automatically:** `cleanup-demos.yml` is configured for 08:00 UTC once ChatOps is set up and separately enabled. It does not run on the destination while Actions are disabled.
 - **Personal accounts:** nothing in this repo reaches them on a schedule. Run `--cleanup` on each machine, or add a scheduled workflow in each account (the `octobooth-*` accounts use a private `demo-cleanup` repo for this).
 
 ### Presenter machines and machine-setup
 
 On each presenter machine, clone **your fork**, [install the loader from your fork's URL](#option-a-install-the-loader-from-a-url), and optionally add it as a project for quick access, as in the [Quick start](#quick-start). Or use install scripts for the whole setup (below), but not both. Run `git pull` and restart the app before each event.
 
-If you use [`octobooth-demos/machine-setup`](https://github.com/octobooth-demos/machine-setup) to set up machines, fork it too and change:
+If you use [`octobooth/machine-setup`](https://github.com/octobooth/machine-setup) to set up machines, fork it too and change:
 
 - `shared.repos_to_clone` in its `config.json` to your fork and your template repos.
-- `DEMO_LAUNCHER_REPO` in [`setup.sh`](https://github.com/octobooth-demos/machine-setup/blob/main/setup.sh) and `$script:TrustedDemoLauncherRepo` in [`install-demo-launcher.ps1`](https://github.com/octobooth-demos/machine-setup/blob/main/install-demo-launcher.ps1). Both are hard-coded to `octobooth-demos/repo-setup-scripts`, and the PowerShell script ignores any other repo in `config.json` and checks the checkout's `origin` remote, so a config change alone isn't enough.
+- The trusted launcher repository constants in [`setup.sh`](https://github.com/octobooth/machine-setup/blob/main/setup.sh) and [`install-demo-launcher.ps1`](https://github.com/octobooth/machine-setup/blob/main/install-demo-launcher.ps1). The migrated destination targets `octobooth/repo-setup-scripts`; inspect the revision you use, since historical tags retain the source target. The PowerShell script checks the checkout's `origin` remote, so a config change alone isn't enough.
 
 ## Currently hard-coded
 
-These spots name `octobooth-demos` directly instead of reading `config.json`. Change them in your fork if you use them:
+These spots name `octobooth` directly instead of reading `config.json`. Change them in your fork if you use them:
 
 | Where | What |
 | --- | --- |
-| [`.github/workflows/new-demo.yml`](../.github/workflows/new-demo.yml) | `owner: octobooth-demos` (App token) and `--owner octobooth-demos`; the `template` options list |
-| [`.github/workflows/cleanup-demos.yml`](../.github/workflows/cleanup-demos.yml) | `ORG: octobooth-demos` and `owner: octobooth-demos` (App token) |
-| [`tests/create-repo.Tests.ps1`](../tests/create-repo.Tests.ps1) | Reads the real `config.json` and expects `octobooth-demos` as the org, template source, and owner of the security demos, and expects the shipped demo keys. If you change `org` or remove demos, update these assertions, or CI's **Test PowerShell** job fails |
-| [`octobooth-demos/machine-setup`](https://github.com/octobooth-demos/machine-setup) | `DEMO_LAUNCHER_REPO` in `setup.sh` and `$script:TrustedDemoLauncherRepo` in `install-demo-launcher.ps1` |
-| `security-octo-supply` and `security-octo-supply-v4` templates | `uses: octobooth-demos/octocat-supply-reusable-workflows/...@v1` (public, so it works from any org) |
+| [`.github/workflows/new-demo.yml`](../.github/workflows/new-demo.yml) | `owner: octobooth` (App token) and `--owner octobooth`; the `template` options list |
+| [`.github/workflows/cleanup-demos.yml`](../.github/workflows/cleanup-demos.yml) | `ORG: octobooth` and `owner: octobooth` (App token) |
+| [`tests/create-repo.Tests.ps1`](../tests/create-repo.Tests.ps1) | Reads the real `config.json` and expects `octobooth` as the org, template source, and owner of the security demos, and expects the shipped demo keys. If you change `org` or remove demos, update these assertions |
+| [Loader diagnostics](../.github/extensions/demo-launcher-loader/extension.mjs) and [tests](../tests/demo-launcher-loader.test.mjs) | The missing-checkout message points to `octobooth/repo-setup-scripts`; checkout path and environment overrides still take precedence |
+| [`octobooth/machine-setup`](https://github.com/octobooth/machine-setup) | Trusted launcher repository constants; consult the selected revision |
+| `security-octo-supply` and `security-octo-supply-v4` templates | Reusable workflow references depend on the selected template revision; internal workflow access must be checked separately |
 
 The Demo Launcher extension, `install.sh`, `create-repo.sh`, and `create-repo.ps1` have no hard-coded org. Some presenter notes in `resources/` mention the booth accounts by name; that's text only.

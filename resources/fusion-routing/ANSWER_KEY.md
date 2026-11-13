@@ -3,12 +3,7 @@
 > **Presenters only.** This file lives in `repo-setup-scripts` and is never copied into
 > demo repos. Don't show it on screen.
 
-`create-repo` creates an OctoCart repo (`fusion-routing-xxxx`) in the signed-in booth account
-(`octobooth-1`, `octobooth-2`, …) from the public `octobooth-demos/octocart` template: a small
-Express + React merch store with vitest tests, without the Code Review demo's PRs.
-You then run **three** prompts, each in its own GitHub Copilot Fusion autopilot session, and compare
-how Fusion handled each one. The story: *you pick one model, and it decides how much horsepower
-each task needs.*
+`create-repo` creates an OctoCart repo (`fusion-routing-xxxx`) in the signed-in booth account (`octobooth-1`, `octobooth-2`, …) from the [`octobooth/octocart`](https://github.com/octobooth/octocart) template: a small Express + React merch store with vitest tests, without the Code Review demo's PRs. You then run **three** prompts, each in its own GitHub Copilot Fusion autopilot session, and compare how Fusion handled each one. The story: *you pick one model, and it decides how much horsepower each task needs.*
 
 ## The three prompts
 

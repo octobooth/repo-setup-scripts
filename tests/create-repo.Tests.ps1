@@ -695,9 +695,9 @@ try {
             }
             $create = @(Find-Calls 'gh' 'repo create')[0]
             $expectedOwner = switch ($scenario) {
-                { $_ -like 'security-prs*' } { 'octobooth-demos' }
-                'nested-body' { 'octobooth-demos' }
-                { $_ -like 'ai-security*' } { 'octobooth-demos' }
+                { $_ -like 'security-prs*' } { 'octobooth' }
+                'nested-body' { 'octobooth' }
+                { $_ -like 'ai-security*' } { 'octobooth' }
                 'owner-override' { 'other-org' }
                 default { 'demo-user' }
             }
@@ -734,7 +734,7 @@ try {
             }
             elseif ($scenario -eq 'routing') {
                 Assert ($create.Arguments[2] -like 'demo-user/fusion-routing-*') "Routing demo created '$($create.Arguments[2])'."
-                Assert ($create.Arguments -contains '--template=octobooth-demos/octocart') 'Routing demo was not created from the OctoCart template.'
+                Assert ($create.Arguments -contains '--template=octobooth/octocart') 'Routing demo was not created from the OctoCart template.'
                 Assert ((Find-Calls 'gh' 'pr create').Count -eq 0 -and (Find-Calls 'gh' 'issue create').Count -eq 0) 'Routing demo opened a PR or issue.'
                 Assert ((Find-Calls 'gh' 'repo clone').Count -eq 0) 'Routing demo cloned despite -NoClone.'
             }
@@ -742,7 +742,7 @@ try {
                 Assert ($create.Arguments -contains '--template=github-samples/securing-your-code') 'Template org override was ignored.'
             }
             else {
-                Assert (($create.Arguments -join ' ').Contains('--template=octobooth-demos/')) 'Template org fallback was ignored.'
+                Assert (($create.Arguments -join ' ').Contains('--template=octobooth/')) 'Template org fallback was ignored.'
             }
             if ($selection -eq '2' -or $scenario -eq 'security-prs-v4') {
                 Assert ((Find-Calls 'gh' 'pr create').Count -eq 2) 'Expected two PRs.'
@@ -916,7 +916,7 @@ try {
                 $fullName = $create.Arguments[2]
                 $hasScan = $scenario -ne 'ai-security-autofix-only'
                 $hasAutofix = $scenario -notin @('ai-security-scan-only', 'ai-security-not-enabled')
-                Assert ($fullName -like 'octobooth-demos/ai-security-*') "$scenario created '$fullName'."
+                Assert ($fullName -like 'octobooth/ai-security-*') "$scenario created '$fullName'."
                 $setupPatches = @((Find-Calls 'gh' 'api').Where({ $_.Arguments[1] -like '*/code-scanning/default-setup' -and $_.Arguments -contains 'PATCH' }))
                 $wantPatches = if ($scenario -eq 'ai-security-setup-reverts') { 2 } else { 1 }
                 Assert ($setupPatches.Count -eq $wantPatches) "Turned default setup off $($setupPatches.Count) times (want $wantPatches)."

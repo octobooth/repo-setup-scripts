@@ -108,6 +108,21 @@ const routingConfig = CONFIG.repos.find((r) => r.key === "fusion-routing");
 const promptText = (file) => readFileSync(join(ROOT, file), "utf8").trim();
 const kickoffOf = (prompt) => JSON.parse(prompt.match(/kickoff object \(don't change the prompt text\): (\{.*?\})\./)[1]);
 
+test("state resolves org-owned demos to octobooth without pinning personal demos", () => {
+    for (const template of out.state.templates) {
+        const orgOwned = ["security-octo-supply-v4", "ai-security"].includes(template.key);
+        assert.equal(template.owner, orgOwned ? "octobooth" : null, template.key);
+    }
+});
+
+test("state preserves an explicit config owner instead of replacing it with the org", () => {
+    const customized = runDriver((config) => {
+        config.repos.find((repo) => repo.key === "ai-security").owner = "presenter-org";
+        return config;
+    });
+    assert.equal(customized.state.templates.find((template) => template.key === "ai-security").owner, "presenter-org");
+});
+
 test("state lists labeled seed prompts for fusion-routing and one unlabeled prompt for fusion-blank", () => {
     const routing = out.state.templates.find((t) => t.key === "fusion-routing");
     assert.deepEqual(routing.seedPrompts.map((p) => p.label), routingConfig.seed_prompts.map((p) => p.label));

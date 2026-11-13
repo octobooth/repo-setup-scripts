@@ -2,13 +2,16 @@
 
 Create demo repositories (private unless a template says otherwise) from the templates in [`config.json`](config.json), with optional branches, issues, demo pull requests, security features, and Codespaces.
 
+> [!IMPORTANT]
+> Migration state: [octobooth/repo-setup-scripts](https://github.com/octobooth/repo-setup-scripts) `main` targets `octobooth`. GitHub Actions remain disabled, so CI, ChatOps, and scheduled cleanup do not run. Existing tags are historical and may still target the read-only source organization; this change does not publish a destination release or assets. Template access varies, including internal repositories. Validate access and required org features before a separately approved live demo.
+
 There are three ways to create a demo, and all of them run the same scripts and config:
 
 - **[Demo Launcher canvas](#demo-launcher-canvas)**: a side panel in the GitHub Copilot app. Pick a demo, click **Create**, then jump into the repo, PR, or session. This is the easiest option at the booth.
 - **[`create-repo.sh` / `create-repo.ps1`](#bash)**: the scripts the launcher runs, used interactively or [non-interactively](#non-interactive-mode).
-- **[ChatOps](#chatops)**: `/new-demo <key>` comments or the Actions tab. These create demos in the `octobooth-demos` org without a booth machine.
+- **[ChatOps](#chatops)**: `/new-demo <key>` comments or the Actions tab. These target the `octobooth` org without a booth machine, but remain disabled during migration.
 
-Not at an `octobooth-demos` booth? See [Run the Demo Launcher in your own org](docs/run-in-your-own-org.md). Outside the booth, the easiest way to install the launcher is [from a URL](#install-from-a-url), with no script to run.
+Not at an `octobooth` booth? See [Run the Demo Launcher in your own org](docs/run-in-your-own-org.md). Outside the booth, the easiest way to install the launcher is [from a URL](#install-from-a-url), with no script to run.
 
 ## Quick start (booth machine)
 
@@ -20,7 +23,7 @@ Do this once per machine (macOS):
    brew install gh jq
    ```
 
-   Then log in to the GitHub CLI **as the booth account** (for example `octobooth-1`), not your personal account. Demos are created in the logged-in account and in the `octobooth-demos` org:
+   Then log in to the GitHub CLI **as the booth account** (for example `octobooth-1`), not your personal account. Demos are created in the logged-in account and in the `octobooth` org:
 
    ```bash
    unset GH_TOKEN GITHUB_TOKEN   # login and refresh fail while either is set
@@ -32,14 +35,14 @@ Do this once per machine (macOS):
    - `codespace` lets Tailspin Toys create its Codespace.
    - `delete_repo` lets the launcher's **Clean up** (and `--cleanup`) delete old demo repos.
    - The default scopes (`repo`, `read:org`, `gist`) cover everything else. Answer **Yes** to "Authenticate Git" so the scripts can push demo branches over HTTPS.
-   - The booth account must be a member of the `octobooth-demos` org and allowed to create repos there. The security demos (`security-octo-supply-v4` and `ai-security`) always create their repo in that org.
+   - The booth account must be a member of the `octobooth` org and allowed to create repos there. The security demos (`security-octo-supply-v4` and `ai-security`) default to that org; explicit owner overrides still take precedence.
    - The booth account also needs a Copilot seat (for Copilot code review and assigning issues to Copilot) and access to Codespaces (for Tailspin Toys).
    - If `GH_TOKEN` or `GITHUB_TOKEN` is set, `gh auth login`/`refresh` refuse to run and `gh` uses the token instead of the booth login. Remove them from your shell profile on booth machines too. The Demo Launcher already ignores them when a stored login exists, but terminal runs of `create-repo` don't.
 
 2. Clone this repo to `~/repos/repo-setup-scripts`:
 
    ```bash
-   gh repo clone octobooth-demos/repo-setup-scripts ~/repos/repo-setup-scripts
+   gh repo clone octobooth/repo-setup-scripts ~/repos/repo-setup-scripts
    ```
 
 3. Install the loader so every session, including a blank new chat, can open the Demo Launcher (see [details](#make-it-available-in-every-session)):
@@ -51,12 +54,12 @@ Do this once per machine (macOS):
 
    Then restart the Copilot app (or reload extensions in open sessions).
 
-   [machine-setup](https://github.com/octobooth-demos/machine-setup)'s `setup.sh` (or `install-demo-launcher.sh`) does steps 2 and 3 for you, and `setup.ps1` (or `install-demo-launcher.ps1`) does them on Windows. With `--ref v1` (`-Ref v1` on Windows) they put the checkout on the current release instead of `main` (see [Releases](#releases)). Booth machines use these scripts, not the [URL install](#install-from-a-url), and don't install both on one machine. See [Which install to use](#which-install-to-use).
+   [machine-setup](https://github.com/octobooth/machine-setup)'s `setup.sh` (or `install-demo-launcher.sh`) does steps 2 and 3 for you, and `setup.ps1` (or `install-demo-launcher.ps1`) does them on Windows. Check its migration guidance before running it: existing `v1` tags retain historical content, not this `main` migration (see [Releases](#releases)). Booth machines use these scripts, not the [URL install](#install-from-a-url), and don't install both on one machine. See [Which install to use](#which-install-to-use).
 4. In the GitHub Copilot app, also add that **existing local folder** (`~/repos/repo-setup-scripts`) as a project. Don't clone it again. This is for quick access at the booth: pin a session in the project, or pin the canvas. The project and the loader use the same checkout.
 
    When you start the session to pin, choose **Current checkout**, not **New worktree**. A worktree session gets its own copy under `copilot-worktrees` on its own branch, so `git pull` never updates it and it keeps loading the old launcher. If you already pinned a worktree session, archive it and start a new **Current checkout** session. To check, the session's `EXTENSION_PATH` in the app logs should be under `repos/repo-setup-scripts`, not `copilot-worktrees`.
 
-Before each booth day, update the machine to the latest tested `v1` with the [booth update commands](#update-a-booth-machine) and restart the app; that updates both the launcher and the project. Only track `main` (`git -C ~/repos/repo-setup-scripts pull`) on a machine you're using to test changes before a release. Then start a chat (a blank new chat works) and ask Copilot to **"open the demo launcher"**. Opening it from a chat is the recommended booth path: the session, PR, and Fusion buttons are one click because Copilot sets up the project and session for you. Opening it from the app's canvas picker also works, but only as a fallback (see [Opened without a chat](#opened-without-a-chat)). At the end of the day, use the launcher's **Clean up** section or `bash ./create-repo.sh --cleanup` (see [Cleaning up](#cleaning-up)).
+Before each booth day, follow the approved [booth update guidance](#update-a-booth-machine) and restart the app. Do not assume a historical `v1` contains the destination migration. Then start a chat (a blank new chat works) and ask Copilot to **"open the demo launcher"**. Opening it from a chat is the recommended booth path: the session, PR, and Fusion buttons are one click because Copilot sets up the project and session for you. Opening it from the app's canvas picker also works, but only as a fallback (see [Opened without a chat](#opened-without-a-chat)). At the end of the day, use the launcher's **Clean up** section or `bash ./create-repo.sh --cleanup` (see [Cleaning up](#cleaning-up)).
 
 ### Before the booth opens
 
@@ -65,47 +68,21 @@ Two demos take too long to create in front of visitors, so create them ahead of 
 - **AI Security** (`ai-security`): about 20 minutes ([checklist](resources/ai-security/ANSWER_KEY.md)).
 - **Security Supply Chain (v4)** (`security-octo-supply-v4`): about 10 minutes ([checklist](resources/security-octo-supply-v4/ANSWER_KEY.md)).
 
-When they're ready, bookmark each demo repo in the browser. Then open the same repo URLs on the other booth machines and bookmark them there too, instead of creating the demos again on every machine. Both live in the `octobooth-demos` org, where the [nightly cleanup](#which-cleanup-covers-which-repos) deletes `demo-generated` repos once they're more than 72 hours old, so create them within 72 hours of use: the morning of, or the day before.
+When they're ready, bookmark each demo repo in the browser. Then open the same repo URLs on the other booth machines and bookmark them there too, instead of creating the demos again on every machine. Both default to the `octobooth` org. The [nightly cleanup](#which-cleanup-covers-which-repos) is configured for `demo-generated` repos older than 72 hours but does not run while Actions are disabled.
 
 ## Releases
 
-`main` of this repo and [machine-setup](https://github.com/octobooth-demos/machine-setup) changes often. So we test both and tag them with the same semantic version: a full tag such as `v1.0.0` for each tested release, and a moving major tag, `v1`, that always points at the latest tested `v1.x.y` (like GitHub Actions' major tags). Booth machines use `v1`, so every machine runs the same tested version and picks up tested fixes without a new tag name. The major only changes (`v2`) for breaking changes, such as new manual setup steps, changed paths, or new required `gh` scopes. If a machine isn't pinned, it tracks `main`.
+The destination migration updates `main` only. Existing `v1` and immutable `vX.Y.Z` tags retain their original source-oriented content. They are historical snapshots, not evidence that the destination launcher, paired machine setup, release notes, or assets have been published or validated. Do not move or rewrite these tags as part of migration.
 
-**The current release is `v1`** (`v1.0.0`; see [Releases](https://github.com/octobooth-demos/repo-setup-scripts/releases)). Booth machines use it through machine-setup.
+The [historical release runbook](docs/releasing.md) records how source releases were paired with machine-setup. Any future destination release requires separate authorization and testing on a booth Mac and Windows machine. The source organization remains read-only.
 
-- **Booth machines:** pass the major tag to machine-setup's `install-demo-launcher` or `setup` script (`--ref v1` on macOS, `-Ref v1` on Windows, or set `BOOTH_RELEASE=v1`). It checks out the tag in `~/repos/repo-setup-scripts` and rewrites the loader. See machine-setup's [Using a release](https://github.com/octobooth-demos/machine-setup#using-a-release).
-- **Pin or update by hand** (without machine-setup): `v1` moves, so fetch with `--force` to update the local tag:
+The loader and [`install.sh`](.github/extensions/demo-launcher/install.sh) still support detached checkouts. The installed loader is a copy, so after an approved update that changes the [loader](.github/extensions/demo-launcher-loader/extension.mjs), reinstall it from the selected checkout. Its path marker and `DEMO_LAUNCHER_REPO` precedence are unchanged.
 
-  ```bash
-  git -C ~/repos/repo-setup-scripts fetch --tags --force
-  git -C ~/repos/repo-setup-scripts checkout --detach v1
-  ```
-
-  Then restart the Copilot app. `git pull` doesn't work on a detached checkout; to go back to `main`, run `git -C ~/repos/repo-setup-scripts checkout main && git -C ~/repos/repo-setup-scripts pull`. If you pinned by hand, re-running machine-setup's `install-demo-launcher` or `setup` script without `--ref` / `-Ref` / `BOOTH_RELEASE` switches the checkout back to `main` and pulls untested code, so on booth machines pass the same ref every time, or set `BOOTH_RELEASE`.
-- The loader and [`install.sh`](.github/extensions/demo-launcher/install.sh) work from a detached checkout. Switching tags updates the launcher itself, but the loader is a copy in `~/.copilot/extensions/`, so if a release changes the [loader](.github/extensions/demo-launcher-loader/extension.mjs) or `install.sh`, re-run machine-setup's `install-demo-launcher` script after switching (the release notes say so).
-- **Templates can't be pinned.** GitHub always creates repos from a template's default branch, so a tag doesn't freeze the template repos. Template changes are guarded by their PR CI and by the test run before each release.
+**Templates can't be pinned.** GitHub creates repos from a template's default branch, so a launcher tag does not freeze templates. Access to internal templates and reusable workflows must also be verified for the account running the demo.
 
 ### Update a booth machine
 
-Before each booth day, or after a new release, put machine-setup on `v1`, then run its launcher install with the same release. These commands use machine-setup's checkout in `~/repos/machine-setup`, which booth machines get from machine-setup's setup. If you set the machine up with the manual [quick start](#quick-start-booth-machine) instead, clone it once first: `gh repo clone octobooth-demos/machine-setup ~/repos/machine-setup` (on Windows, `gh repo clone octobooth-demos/machine-setup "$HOME\repos\machine-setup"`). On macOS:
-
-```bash
-git -C ~/repos/machine-setup fetch --tags --force
-git -C ~/repos/machine-setup checkout --detach v1
-cd ~/repos/machine-setup && bash install-demo-launcher.sh --ref v1
-```
-
-On Windows, in PowerShell:
-
-```powershell
-git -C "$HOME\repos\machine-setup" fetch --tags --force
-git -C "$HOME\repos\machine-setup" checkout --detach v1
-cd "$HOME\repos\machine-setup"; Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; .\install-demo-launcher.ps1 -Ref v1
-```
-
-Then restart the Copilot app (on Windows, quit it from the system tray first). See machine-setup's [booth playbook](https://github.com/octobooth-demos/machine-setup/blob/main/docs/booth-playbook.md) for the full booth-day steps.
-
-To see how a change gets from a PR to booth machines, see [Making a change](docs/releasing.md#making-a-change). To cut a release, see [Cutting a release](docs/releasing.md#cutting-a-release).
+Machine rollout is separate from this code migration. Follow [machine-setup's booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md) for the approved destination revision and account checks. Do not use an old `--ref v1`, `-Ref v1`, or `BOOTH_RELEASE=v1` expecting it to contain these changes. Restart the Copilot app after an approved launcher/loader update (on Windows, quit it from the system tray first).
 
 ## Demos
 
@@ -114,12 +91,12 @@ Each entry in [`config.json`](config.json) is one demo. Pass its key to `--templ
 | Key | Demo | What gets created | Presenter notes |
 | --- | --- | --- | --- |
 | `securing-your-code` | Secure Code | Repo only, from `github-samples/securing-your-code` | Labs live in the repo |
-| `security-octo-supply-v4` | Security Supply Chain (v4) | Repo in the `octobooth-demos` org from the v4 OctoCAT Supply template (Express 5, React 19, Vite 8) with Dependabot, autofix, and CodeQL turned on, plus two vulnerable PRs (TypeScript and PHP) | Pinned to the org. PHP findings need AI Code Scanning ([details](#security-supply-chain-v4)); [presenter notes](resources/security-octo-supply-v4/ANSWER_KEY.md). **Create it ahead:** it takes about 10 minutes to be fully ready |
+| `security-octo-supply-v4` | Security Supply Chain (v4) | Repo in the `octobooth` org from the v4 OctoCAT Supply template (Express 5, React 19, Vite 8) with Dependabot, autofix, and CodeQL turned on, plus two vulnerable PRs (TypeScript and PHP) | Pinned to the org. PHP findings need AI Code Scanning ([details](#security-supply-chain-v4)); [presenter notes](resources/security-octo-supply-v4/ANSWER_KEY.md). **Create it ahead:** it takes about 10 minutes to be fully ready |
 | `tailspin-toys` | Tailspin Toys | Repo, an issue assigned to Copilot coding agent, and a Codespace | Needs coding agent and Codespaces on the owner ([note](#where-repos-are-created)) |
 | `ctrl-slash` | Ctrl Slash | Repo only | |
 | `booth-bingo` | Booth Bingo (stacked PRs) | Public repo, 3 stacked PRs registered as a native stack, and GitHub Pages | [Details](#booth-bingo-stacked-prs); talk track in the template's README |
 | `octocart` | OctoCart (Copilot Code Review) | Repo with 4 feature PRs. Copilot Code Review is requested on 3 of them; the 4th is left for you to request live | [Details](#octocart-copilot-code-review); [answer key](resources/octocart/ANSWER_KEY.md) (presenters only) |
-| `ai-security` | AI Security (AI Scan + agentic autofix) | Repo in the `octobooth-demos` org with an infra PR that AI Scan reviews, plus CodeQL alerts on `main` with one already assigned to Copilot | [Details](#ai-security-ai-scan--agentic-autofix); [presenter notes](resources/ai-security/ANSWER_KEY.md). **Pre-bake it:** it takes about 20 minutes to be fully ready |
+| `ai-security` | AI Security (AI Scan + agentic autofix) | Repo in the `octobooth` org with an infra PR that AI Scan reviews, plus CodeQL alerts on `main` with one already assigned to Copilot | [Details](#ai-security-ai-scan--agentic-autofix); [presenter notes](resources/ai-security/ANSWER_KEY.md). **Pre-bake it:** it takes about 20 minutes to be fully ready |
 | `fusion-blank` | GitHub Copilot Fusion: Blank Prompt | Empty repo (README only) in the booth account, plus a seed prompt you run with the GitHub Copilot Fusion model in autopilot | [Details](#github-copilot-fusion-blank-prompt); [presenter notes](resources/fusion-blank/ANSWER_KEY.md) |
 | `fusion-routing` | GitHub Copilot Fusion: Routing (Single, Cascade, Critique) | OctoCart repo in the booth account, plus three seed prompts sized so Fusion picks a different pattern for each | [Details](#github-copilot-fusion-routing); [presenter notes](resources/fusion-routing/ANSWER_KEY.md) |
 
@@ -167,7 +144,7 @@ Every repository the scripts create gets the `demo-generated` topic, which is wh
 
 **Recommended: open it from a chat.** Then the follow-up buttons are one click, and Copilot adds the project and opens the session, PR, or Fusion run for you. Opening the launcher from the app's canvas picker (no chat) is a fallback with more manual steps; see [Opened without a chat](#opened-without-a-chat). This stays the guidance until standalone canvases ship to non-staff builds with the app access they need to create sessions themselves.
 
-To install it outside `octobooth-demos`, see [Run the Demo Launcher in your own org](docs/run-in-your-own-org.md), including [install options and limitations](docs/run-in-your-own-org.md#installing-the-demo-launcher-canvas-options-and-limitations).
+To install it outside `octobooth`, see [Run the Demo Launcher in your own org](docs/run-in-your-own-org.md), including [install options and limitations](docs/run-in-your-own-org.md#installing-the-demo-launcher-canvas-options-and-limitations).
 
 ### What it does
 
@@ -269,7 +246,7 @@ How the loader works:
 
 For use outside the booth. It installs the same loader from its folder in this repo, on Windows, macOS, or Linux. You still need the repo cloned: the loader looks for `~/repos/repo-setup-scripts` (`%USERPROFILE%\repos\repo-setup-scripts` on Windows), or the folder in `DEMO_LAUNCHER_REPO` if you set it. In a Copilot app chat, ask:
 
-> Install the extension from https://github.com/octobooth-demos/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader
+> Install the extension from [octobooth/repo-setup-scripts's loader](https://github.com/octobooth/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader).
 
 Then restart the app. If the clone is missing, the canvas opens a page that says where to clone it. It installs as `demo-launcher-loader`, so [don't also run an install script](#dont-install-both) on the same machine. See the [loader README](.github/extensions/demo-launcher-loader/README.md) for details.
 
@@ -325,10 +302,10 @@ By default, repos are created in **the account that is logged in** (`gh api user
 3. The logged-in account.
 4. The top-level `org` (only when there is no user account, such as a GitHub App token in Actions).
 
-The script prints `Target owner:` before creating anything. The templates in `octobooth-demos` are public, so any account can create repos from them.
+The script prints `Target owner:` before creating anything. Templates default to `octobooth`; [`github-samples/securing-your-code`](https://github.com/github-samples/securing-your-code) remains an explicit exception. Not all destination templates are public: `tailspin-toys` and `security-octo-supply` are internal. The signed-in account needs access to its template as well as permission to create repos under the chosen owner.
 
 > [!NOTE]
-> `tailspin-toys` assigns an issue to `@copilot` and starts a Codespace. In a personal account those need Copilot coding agent and Codespaces access on that account. If they are not available, run it with `--owner octobooth-demos`.
+> `tailspin-toys` assigns an issue to `@copilot` and starts a Codespace. In a personal account those need Copilot coding agent and Codespaces access on that account. An explicit `--owner octobooth` can target the org if it has those features and the booth account has permission; it does not bypass template access requirements.
 
 ## Showing the game
 
@@ -370,8 +347,8 @@ Deleting repos needs the `delete_repo` scope. The scripts request it when they l
 
 | Where the demo repo lives | How it gets cleaned up |
 | --- | --- |
-| A booth account (`octobooth-1`, `octobooth-2`, …), the default | Automatic: each booth account's private `demo-cleanup` repo runs a weekly workflow (Mondays 08:00 UTC) that deletes its `demo-generated` repos older than 7 days. To run it sooner, use that repo's **Actions** tab. Between runs, use `--cleanup` / `-Cleanup` **on that machine** (nothing in this repo can reach booth accounts, because the [ChatOps App](#chatops) is only installed on the org). After an event, admins can reset every booth account with the private [`octobooth-demos/admin-tasks`](https://github.com/octobooth-demos/admin-tasks) repo, which deletes every repo in each account except `demo-cleanup`, tagged or not. See the [booth playbook](https://github.com/octobooth-demos/machine-setup/blob/main/docs/booth-playbook.md) for all of it. |
-| The `octobooth-demos` org (`--owner octobooth-demos`, ChatOps, `security-octo-supply-v4`, `ai-security`) | Automatic: the [nightly cleanup](.github/workflows/cleanup-demos.yml) deletes them at 08:00 UTC once they are more than 72 hours old. To clean up sooner, comment `/cleanup [hours] --confirm` or run the workflow from the Actions tab. After an event, `/cleanup --all --confirm` deletes them all regardless of age. |
+| A booth account (`octobooth-1`, `octobooth-2`, …), the default | Each booth account's private `demo-cleanup` repo owns its separate weekly cleanup; this migration does not change those accounts or workflows. Between runs, use `--cleanup` / `-Cleanup` **on that machine**. Administrative resets are separate work in [`octobooth/admin-tasks`](https://github.com/octobooth/admin-tasks); do not run them as migration checks. See the [booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md). |
+| The `octobooth` org (`--owner octobooth`, ChatOps, `security-octo-supply-v4`, `ai-security`) | The [nightly cleanup](.github/workflows/cleanup-demos.yml) is configured for 08:00 UTC and repos older than 72 hours, but remains disabled with Actions. After separately approved activation, `/cleanup [hours] --confirm` or manual dispatch can clean up sooner; `/cleanup --all --confirm` ignores age. |
 
 **Recommended booth routine (repos in each booth account):**
 
@@ -388,7 +365,7 @@ bash ./create-repo.sh --cleanup
 # or, after the event, remove every demo regardless of age: bash ./create-repo.sh --cleanup --all
 ```
 
-**Fallback (repos in the org, cleaned up automatically):** add `--owner octobooth-demos` (or `-Owner octobooth-demos`) when creating demos. Nothing needs to run on the machines afterwards. This requires the booth accounts to be `octobooth-demos` members who are allowed to create repos, including **public** ones (Booth Bingo is public so GitHub Pages works).
+**Org owner override:** add `--owner octobooth` (or `-Owner octobooth`) when creating demos. This requires the booth accounts to be `octobooth` members who are allowed to create repos, including **public** ones (Booth Bingo is public so GitHub Pages works). Do not rely on automatic cleanup while Actions are disabled.
 
 ## Workflows and config fields
 
@@ -409,7 +386,7 @@ Each `repos[]` entry needs `key`, `display_name`, `template` (except for the `bl
 
 ### Booth Bingo (stacked PRs)
 
-`booth-bingo` creates a repo from [`octobooth-demos/booth-bingo`](https://github.com/octobooth-demos/booth-bingo) (a template repo whose source lives in [`templates/booth-bingo`](templates/booth-bingo)) and opens three small stacked PRs from [`resources/booth-bingo`](resources/booth-bingo):
+`booth-bingo` creates a repo from [`octobooth/booth-bingo`](https://github.com/octobooth/booth-bingo) (a template repo whose source lives in [`templates/booth-bingo`](templates/booth-bingo)) and opens three small stacked PRs from [`resources/booth-bingo`](resources/booth-bingo):
 
 1. `bingo/1-game-logic` → `main`: `checkWin()` plus `node --test` tests
 2. `bingo/2-wire-ui` → layer 1: highlight the winning line
@@ -419,7 +396,7 @@ Each overlay holds the cumulative files for its layer. The booth talk track is i
 
 ### Security Supply Chain (v4)
 
-`security-octo-supply-v4` creates a repo from [`octobooth-demos/security-octo-supply-v4`](https://github.com/octobooth-demos/security-octo-supply-v4), which is based on the v4 [OctoCAT Supply](https://github.com/octodemo/octocat_supply) demo (Node.js API) plus a vulnerable PHP app. The script opens two PRs:
+`security-octo-supply-v4` creates a repo from [`octobooth/security-octo-supply-v4`](https://github.com/octobooth/security-octo-supply-v4), which is based on the v4 [OctoCAT Supply](https://github.com/octodemo/octocat_supply) demo (Node.js API) plus a vulnerable PHP app. The script opens two PRs:
 
 1. `feature-add-tos-download` (from [`resources/security-octo-supply-v4/pr-typescript`](resources/security-octo-supply-v4/pr-typescript)): a terms-of-service download with a path traversal for CodeQL and Copilot Autofix. It matches upstream's `feature-add-tos-download` branch and includes intentional code-quality issues in `userDetailsRepo.ts` for CodeQL. The two that TypeScript itself rejects carry `@ts-expect-error`, so the API still builds.
 2. `feature/supplier-notes` (from [`resources/security-octo-supply-v4/pr-php`](resources/security-octo-supply-v4/pr-php)): supplier notes in the PHP app. CodeQL doesn't analyze PHP, so these findings come from AI Code Scanning.
@@ -440,7 +417,7 @@ Before the demo:
 
 ### OctoCart (Copilot Code Review)
 
-`octocart` creates a repo from [`octobooth-demos/octocart`](https://github.com/octobooth-demos/octocart). It's a small TypeScript store (Express API + React/Vite) whose `.github/copilot-instructions.md` and `.github/instructions/*.instructions.md` define house rules. The script then opens four feature PRs from [`resources/octocart`](resources/octocart):
+`octocart` creates a repo from [`octobooth/octocart`](https://github.com/octobooth/octocart). It's a small TypeScript store (Express API + React/Vite) whose `.github/copilot-instructions.md` and `.github/instructions/*.instructions.md` define house rules. The script then opens four feature PRs from [`resources/octocart`](resources/octocart):
 
 1. `feature/stackable-promo-codes`: stackable promo codes and sale pricing, with subtle correctness bugs (a boundary error, float money math, missing `await`s)
 2. `feature/order-history-export`: order history and a CSV export, with security, performance, and robustness issues (IDOR, token in the URL, CSV injection, N+1)
@@ -455,7 +432,7 @@ The **presenter answer key**, [`resources/octocart/ANSWER_KEY.md`](resources/oct
 
 ### AI Security (AI Scan + agentic autofix)
 
-`ai-security` creates a repo in `octobooth-demos` from [`octobooth-demos/security-octo-supply`](https://github.com/octobooth-demos/security-octo-supply). It shows two features that became generally available on 2026-10-15: [AI Scan for pull requests](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/ai-powered-security-detections) and [agentic autofix for code scanning alerts](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/autofix-for-code-scanning). The script:
+`ai-security` creates a repo in `octobooth` from [`octobooth/security-octo-supply`](https://github.com/octobooth/security-octo-supply). It shows two features that became generally available on 2026-10-15: [AI Scan for pull requests](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/ai-powered-security-detections) and [agentic autofix for code scanning alerts](https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/autofix-for-code-scanning). The script:
 
 1. Turns on Advanced Security for the repo, turns CodeQL default setup off (the org's default security configuration turns it on when the repo is created), and sets AI Scan to enabled with `PATCH /repos/{owner}/{repo}/code-scanning/ai-scan`. The repo normally inherits that setting from the org already, so this is a safety net that warns rather than fails.
 2. Commits [`resources/ai-security/seed`](resources/ai-security/seed) to `main`: a TypeScript route file that gives CodeQL four more alerts on the default branch (about six in total).
@@ -463,9 +440,9 @@ The **presenter answer key**, [`resources/octocart/ANSWER_KEY.md`](resources/oct
 4. Assigns the `js/sql-injection` alert to Copilot with `PATCH /repos/{owner}/{repo}/code-scanning/alerts/{n}`, so a draft fix PR is ready by demo time. It assigns `github-agentic-autofix[bot]`, the account the UI's **Assign to Copilot** uses, and falls back to `copilot-swe-agent[bot]`. If both fail, it warns, and you can assign the alert yourself.
 5. Opens "Containerize the supplier portal and deploy it to staging" from [`resources/ai-security/pr-infra`](resources/ai-security/pr-infra): a Dockerfile, a deploy shell script, Terraform, and a PHP health check, none of which CodeQL analyzes. AI Scan doesn't use CodeQL results, but it only reviews PRs opened after code scanning is on. Opening the PR after step 3 guarantees that.
 
-**Pre-bake this demo.** The script takes about 5–10 minutes. AI Scan findings and Copilot's draft PR each take about 10 more minutes, and longer when GitHub is busy. Create it from the launcher before the booth opens, then work through the checklist in the [presenter notes](resources/ai-security/ANSWER_KEY.md). One repo can serve the whole day; the nightly cleanup deletes it after 72 hours.
+**Pre-bake this demo.** The script takes about 5–10 minutes. AI Scan findings and Copilot's draft PR each take about 10 more minutes, and longer when GitHub is busy. Create it from the launcher before the booth opens, then work through the checklist in the [presenter notes](resources/ai-security/ANSWER_KEY.md). One repo can serve the whole day; nightly cleanup is configured for 72 hours but remains disabled during migration.
 
-The script turns CodeQL default setup off and waits (up to 10 minutes; override with `DEFAULT_SETUP_WAIT_SECONDS`) until GitHub reports it off, because default setup can't run alongside the template's advanced workflow. Everything it does needs only admin on the repo it creates, so booth accounts that are org members (not owners) can run it. The org must already allow and enable AI Scan and agentic autofix; `octobooth-demos` does both. Each run uses Code Security AI credits and Actions minutes.
+The script turns CodeQL default setup off and waits (up to 10 minutes; override with `DEFAULT_SETUP_WAIT_SECONDS`) until GitHub reports it off, because default setup can't run alongside the template's advanced workflow. Everything it does needs only admin on the repo it creates, so booth accounts that are org members (not owners) can run it. The org must already allow and enable AI Scan and agentic autofix; verify destination availability separately rather than assuming source settings were copied. Each run uses Code Security AI credits and Actions minutes.
 
 **Presenter script** (full version and pre-bake checklist in [`resources/ai-security/ANSWER_KEY.md`](resources/ai-security/ANSWER_KEY.md)):
 
@@ -476,7 +453,7 @@ The script turns CodeQL default setup off and waits (up to 10 minutes; override 
 
 `fusion-blank` shows GitHub Copilot Fusion (formerly Project HydraFusion), the Copilot model option that orchestrates several models per request (Single, Cascade, or Critique) for frontier-level quality at lower cost. The preview works best on a substantial, well-scoped, first-turn prompt in autopilot, so the demo is just that: an empty repo in the booth account (like Ctrl Slash and Booth Bingo; the seed prompt and presenter notes stay in this repo) and one prompt from [`resources/fusion-blank/seed-prompt.txt`](resources/fusion-blank/seed-prompt.txt), which builds "Mona Merge Rush", a 2048-style Octocat game with `node:test` tests.
 
-After the run finishes, click **▶ Run with Fusion** in the launcher, or copy the prompt and run it yourself with the GitHub Copilot Fusion model in autopilot. Expect about 4-5 minutes and a playable game whose tests pass. Talking points, benchmark numbers, and alternate prompts are in the [presenter notes](resources/fusion-blank/ANSWER_KEY.md). Use a fresh repo for each visitor, and remove old ones with the launcher's **Clean up** or `--cleanup` on that machine (see [Which cleanup covers which repos](#which-cleanup-covers-which-repos)). ChatOps (`/new-demo fusion-blank`) still creates it in the org, where the nightly cleanup deletes it after 72 hours.
+After the run finishes, click **▶ Run with Fusion** in the launcher, or copy the prompt and run it yourself with the GitHub Copilot Fusion model in autopilot. Expect about 4-5 minutes and a playable game whose tests pass. Talking points, benchmark numbers, and alternate prompts are in the [presenter notes](resources/fusion-blank/ANSWER_KEY.md). Use a fresh repo for each visitor, and remove old ones with the launcher's **Clean up** or `--cleanup` on that machine (see [Which cleanup covers which repos](#which-cleanup-covers-which-repos)). ChatOps (`/new-demo fusion-blank`) targets the org, but ChatOps and nightly cleanup remain disabled during migration.
 
 ### GitHub Copilot Fusion: Routing
 
@@ -492,10 +469,10 @@ Run all three (each opens its own `[Fusion - <label>] …` session) and compare 
 
 ## ChatOps
 
-Two workflows in this repo let you create and clean up demos without a booth machine running the script.
+Two workflows in this repo are configured to create and clean up demos without a booth machine running the script. **Actions remain disabled during migration.** The descriptions below apply only after separately approved activation and App setup; changing owner strings does not install an App or configure credentials.
 
-- **[New demo](.github/workflows/new-demo.yml)**: run it from the Actions tab and pick a template, or comment `/new-demo <key>` on any issue or PR in this repo. Repos are always created in `octobooth-demos`, because App tokens cannot create repos in personal accounts. It replies with the repo URL and, for stacks, the top PR URL and the game URL (for OctoCart, the pull request list). Only `repo_only`, `blank`, `security_prs`, `stacked_prs`, `code_review_prs`, and `ai_security` templates are allowed, because Codespaces need a user token.
-- **[Clean up demos](.github/workflows/cleanup-demos.yml)**: runs nightly, from the Actions tab (`max_age_hours`, default 72; `dry_run`, default on), or by comment: `/cleanup [hours | --all] [--dry-run | --confirm]`. Comment runs are dry runs unless they include `--confirm`; only the nightly run deletes without opting in. Manual and comment runs need a cutoff of at least 1 hour unless they use the end-of-event override (`--all` in a comment, or the `all` input on the Actions tab), which deletes every demo repo in the org regardless of age and adds a warning to the reply, and the comment must start with exactly `/cleanup`. If some deletions fail, the run continues with the rest, then fails and lists what was and was not deleted. It only deletes repos in `octobooth-demos` that have the `demo-generated` topic **and** are older than the cutoff. It cannot see repos in booth accounts; see [Which cleanup covers which repos](#which-cleanup-covers-which-repos).
+- **[New demo](.github/workflows/new-demo.yml)**: run it from the Actions tab and pick a template, or comment `/new-demo <key>` on any issue or PR in this repo. Repos are always created in `octobooth`, because App tokens cannot create repos in personal accounts. It replies with the repo URL and, for stacks, the top PR URL and the game URL (for OctoCart, the pull request list). Only `repo_only`, `blank`, `security_prs`, `stacked_prs`, `code_review_prs`, and `ai_security` templates are allowed, because Codespaces need a user token.
+- **[Clean up demos](.github/workflows/cleanup-demos.yml)**: runs nightly, from the Actions tab (`max_age_hours`, default 72; `dry_run`, default on), or by comment: `/cleanup [hours | --all] [--dry-run | --confirm]`. Comment runs are dry runs unless they include `--confirm`; only the nightly run deletes without opting in. Manual and comment runs need a cutoff of at least 1 hour unless they use the end-of-event override (`--all` in a comment, or the `all` input on the Actions tab), which deletes every demo repo in the org regardless of age and adds a warning to the reply, and the comment must start with exactly `/cleanup`. If some deletions fail, the run continues with the rest, then fails and lists what was and was not deleted. It only deletes repos in `octobooth` that have the `demo-generated` topic **and** are older than the cutoff. It cannot see repos in booth accounts; see [Which cleanup covers which repos](#which-cleanup-covers-which-repos).
 
 Comment commands only run for users with write, maintain, or admin access to this repository.
 
@@ -503,7 +480,7 @@ Comment commands only run for users with write, maintain, or admin access to thi
 
 The workflows authenticate as a GitHub App so they can create and delete org repos.
 
-1. Create a GitHub App owned by `octobooth-demos` (no webhook needed) with these **repository** permissions:
+1. Create a GitHub App owned by `octobooth` (no webhook needed) with these **repository** permissions:
    - Administration: Read and write (create from template, add topics, delete repos)
    - Contents: Read and write (push branches)
    - Pull requests: Read and write (open PRs, register stacks)
@@ -513,7 +490,7 @@ The workflows authenticate as a GitHub App so they can create and delete org rep
    - Actions: Read and write (start the first Pages deploy, wait for CodeQL)
    - Code scanning alerts: Read and write (read the AI Security demo's alerts and assign one to Copilot)
    - Metadata: Read-only (required)
-2. Install it on the `octobooth-demos` org with access to **All repositories** (new demo repos must be covered automatically).
+2. Install it on the `octobooth` org with access to **All repositories** (new demo repos must be covered automatically).
 3. In this repo's **Settings → Secrets and variables → Actions**, add `APP_ID` (the App ID) and `APP_PRIVATE_KEY` (the full contents of a generated `.pem` private key).
 
 The security features enabled by `security_prs` (Dependabot alerts, automated security fixes, CodeQL default setup) and `ai_security` (Advanced Security, AI Scan) are covered by Administration write. If the App token can't assign the alert to Copilot, ChatOps `ai-security` demos skip that step with a warning, and you can assign the alert yourself from the alert page.
@@ -541,6 +518,6 @@ shellcheck --severity=warning -x create-repo.sh .github/extensions/demo-launcher
 Invoke-ScriptAnalyzer -Path .\create-repo.ps1 -Settings .\PSScriptAnalyzerSettings.psd1
 ```
 
-The [CI workflow](.github/workflows/ci.yml) runs these checks on every pull request and push to `main` (the run-store tests on Linux, macOS, and Windows), and also validates `config.json` (required fields, workflow names, and that every referenced resource file and directory exists). CI never creates repos or uses secrets.
+The [CI workflow](.github/workflows/ci.yml) defines these checks for every pull request and push to `main` (the run-store tests on Linux, macOS, and Windows), and also validates `config.json` (required fields, workflow names, and that every referenced resource file and directory exists). CI never creates repos or uses secrets. It does not run while Actions remain disabled; run available checks locally and record missing platform validation.
 
 Before changing this repo, read [AGENTS.md](AGENTS.md): the change rules (script parity, Windows PowerShell 5.1, intentional vulnerabilities to leave alone) and release rules for maintainers and coding agents.

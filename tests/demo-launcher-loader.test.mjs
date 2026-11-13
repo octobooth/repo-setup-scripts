@@ -114,9 +114,9 @@ test("a missing checkout registers a Demo Launcher canvas that explains the fix"
     assert.deepEqual(out.canvases, ["demo-launcher"]);
     assert.equal(out.status.ok, false);
     assert.equal(out.status.repoRoot, expected);
-    assert.match(out.status.message, /Clone octobooth-demos\/repo-setup-scripts/);
+    assert.match(out.status.message, /Clone octobooth\/repo-setup-scripts/);
     assert.match(out.status.message, /DEMO_LAUNCHER_REPO/);
-    assert.match(out.html, /gh repo clone octobooth-demos\/repo-setup-scripts/);
+    assert.match(out.html, /gh repo clone octobooth\/repo-setup-scripts/);
     assert.equal(out.logs.length, 1);
     assert.equal(out.logs[0].o.level, "error");
 });
@@ -167,7 +167,8 @@ test("install.sh writes the same loader with its checkout baked in", { skip: pro
     writeFileSync(join(checkout, ".github", "extensions", "demo-launcher", "extension.mjs"), FAKE_LAUNCHER);
     const copilotHome = join(dir, "copilot home");
     const res = spawnSync("bash", [join(checkout, ".github", "extensions", "demo-launcher", "install.sh")], {
-        env: { ...process.env, COPILOT_HOME: copilotHome },
+        // Keep repo-local test fixtures from discovering the real checkout above them.
+        env: { ...process.env, COPILOT_HOME: copilotHome, GIT_CEILING_DIRECTORIES: dir },
         encoding: "utf8",
     });
     assert.equal(res.status, 0, res.stderr);
@@ -181,6 +182,11 @@ test("install.sh writes the same loader with its checkout baked in", { skip: pro
 
     const out = runLoader(dir, installed);
     assert.equal(out.launcher, pathToFileURL(join(checkout, ".github", "extensions", "demo-launcher", "extension.mjs")).href);
+
+    const overrideRoot = join(dir, "override checkout");
+    const overrideLauncher = makeCheckout(overrideRoot);
+    const overridden = runLoader(dir, installed, { env: { DEMO_LAUNCHER_REPO: overrideRoot } });
+    assert.equal(overridden.launcher, pathToFileURL(overrideLauncher).href);
 
     const un = spawnSync("bash", [join(checkout, ".github", "extensions", "demo-launcher", "install.sh"), "--uninstall"], {
         env: { ...process.env, COPILOT_HOME: copilotHome },

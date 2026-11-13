@@ -1,5 +1,10 @@
 # Releasing
 
+> [!IMPORTANT]
+> Historical runbook: the process and commands below describe releases from [octobooth-demos](https://github.com/octobooth-demos), which is read-only during migration. Do not execute these publication commands against the source. The destination migration changes [octobooth/repo-setup-scripts](https://github.com/octobooth/repo-setup-scripts) `main` only, while Actions remain disabled. Existing tags retain their original source-oriented content; no destination `v1`, release, or assets are newly published by this migration. Future release work needs separate authorization and Mac/Windows validation. See [the current migration state](../README.md#releases).
+
+## Historical release process
+
 Releases use semantic version tags, with the **same version on both** this repo and [octobooth-demos/machine-setup](https://github.com/octobooth-demos/machine-setup):
 
 - Each tested release gets a full tag, `vX.Y.Z` (for example `v1.0.0`).

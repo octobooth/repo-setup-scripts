@@ -14,14 +14,14 @@ Use one or the other on a machine, [not both](#dont-install-both).
 1. Clone the repo to the default path (or anywhere, and set `DEMO_LAUNCHER_REPO` to it). The launcher runs `config.json`, `create-repo`, and `resources/` from this clone:
 
    ```bash
-   gh repo clone octobooth-demos/repo-setup-scripts ~/repos/repo-setup-scripts
+   gh repo clone octobooth/repo-setup-scripts ~/repos/repo-setup-scripts
    ```
 
    On Windows that's `%USERPROFILE%\repos\repo-setup-scripts`.
 
 2. In a Copilot app chat, ask:
 
-   > Install the extension from https://github.com/octobooth-demos/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader
+   > Install the extension from [octobooth/repo-setup-scripts's loader](https://github.com/octobooth/repo-setup-scripts/tree/main/.github/extensions/demo-launcher-loader).
 
    It installs to `~/.copilot/extensions/demo-launcher-loader/`.
 

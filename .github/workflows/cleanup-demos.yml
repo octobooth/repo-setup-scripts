@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ORG: octobooth-demos
+  ORG: octobooth
   TOPIC: demo-generated
   # Manual and comment runs cannot target repos younger than this.
   MIN_AGE_HOURS: 1
@@ -123,7 +123,7 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: octobooth-demos
+          owner: octobooth
 
       - name: Delete old demo repositories
         id: cleanup
