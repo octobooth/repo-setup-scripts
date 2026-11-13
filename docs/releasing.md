@@ -13,6 +13,17 @@ Releases use semantic version tags, with the **same version on both** this repo 
 
 See [Releases](../README.md#releases) for how booth machines use the tags.
 
+## Migration release acceptance
+
+For the organization migration, hosted CI and remote verification replace the physical-machine validation in step 4 of [Making a change](#making-a-change) and step 1 of [Cutting a release](#cutting-a-release). Local software installation, booth setup execution, VM work, physical Mac/Windows pilots, and machine cutover are not migration requirements. Normal repository editing and Git/API operations can run in local sessions; no substitute test environment is needed.
+
+1. Record the exact candidate SHA for each destination repository and successful hosted CI runs for those SHAs, including the machine-setup Windows PowerShell 5.1 job. Existing evidence: [machine-setup CI at 978e3d7](https://github.com/octobooth/machine-setup/actions/runs/43483575581) and [launcher CI at 0487cb0](https://github.com/octobooth/repo-setup-scripts/actions/runs/43489813453). If a candidate changes, use the completed CI result for the new SHA rather than assuming an earlier run covers it.
+2. Verify destination refs and the exact candidate commits remotely. Before authorized publication, confirm the proposed immutable version is unused in both repositories. After publication, verify the paired version tags, matching major tags, and GitHub Releases resolve to the recorded commits. Never rewrite a published immutable version.
+3. Verify that the Playwright version pinned by the machine-setup candidate has both its archive and checksum available from the destination release URLs, and that the archive matches the checksum. For version 0.0.83, use the [destination bundle release](https://github.com/octobooth/machine-setup/releases/tag/playwright-mcp-v0.0.83). A Git tag or successful setup exit code alone is not asset verification.
+4. Record the CI links, candidate SHAs, and remote ref/release/asset results. Describe this as automated and remote acceptance, not a physical-machine test. Keep separately unresolved demo or integration findings explicit; they are not silently satisfied by CI.
+
+Release/tag writes still require their existing explicit authorization. The future operator setup and rollout instructions below remain available, but running them is not a gate for completing this migration.
+
 ## Making a change
 
 How a change gets from a PR to the booth machines after release work is authorized. Machines pinned to a release tag do not pick up a `main` merge; they need the approved tag and an explicit update. The commands for steps 4 to 7 are in [Cutting a release](#cutting-a-release). Do not use the historical `v1` as the migration-ready release.
@@ -20,11 +31,11 @@ How a change gets from a PR to the booth machines after release work is authoriz
 1. **Open a PR to `main`** in this repo or machine-setup.
 2. **Wait for CI and Copilot code review**, and fix what they find.
 3. **Merge.** `main` now contains the candidate change. Machines pinned to a release tag aren't affected.
-4. **Test `main` on a booth Mac and a Windows machine** ([step 1](#cutting-a-release)): clear `BOOTH_RELEASE`, put both checkouts on `main`, run machine-setup's `install-demo-launcher` **without** a ref, run the demos, and record both commit IDs. You can batch several merged PRs into one release.
+4. **Validate and record the candidate commits.** For this migration, use [Migration release acceptance](#migration-release-acceptance); do not run booth setup or pilots. For normal future releases with separately authorized machine testing, test `main` on a booth Mac and a Windows machine ([step 1](#cutting-a-release)): clear `BOOTH_RELEASE`, put both checkouts on `main`, run machine-setup's `install-demo-launcher` **without** a ref, run the demos, and record both commit IDs. You can batch several merged PRs into one release.
 5. **Tag both repos at the tested commits** ([step 2](#cutting-a-release)), with the same version, even if only one repo changed, so the versions stay paired. Bump the patch (`v1.0.x`) for fixes and the minor (`v1.x.0`) for new demos or features.
 6. **Move the matching major tag** to the same commits ([step 3](#cutting-a-release)).
 7. **Create the GitHub Releases** on both repos with `--generate-notes --verify-tag` ([step 4](#cutting-a-release)).
-8. **Update the booth machines:** verify destination remotes, fetch and check out the approved major tag in machine-setup, run `install-demo-launcher --ref <major>` (`-Ref <major>` on Windows) with the same tag, verify both installed commits match the release record, and restart the Copilot app. See [Update a booth machine](../README.md#update-a-booth-machine). Never update by checking out a tag alone when the loader or setup changed.
+8. **For a separately authorized operator rollout, update the booth machines:** verify destination remotes, fetch and check out the approved major tag in machine-setup, run `install-demo-launcher --ref <major>` (`-Ref <major>` on Windows) with the same tag, verify both installed commits match the release record, and restart the Copilot app. See [Update a booth machine](../README.md#update-a-booth-machine). Never update by checking out a tag alone when the loader or setup changed. This rollout is outside the migration acceptance scope.
 
 Steps 5 to 7 in one block, run only after release authorization from destination clones where you can push to both repos (not necessarily the booth machine). Fill in an unused version, its matching major, and the two commit IDs you recorded in step 4. The example version below is not a claim that it is available or migration-ready:
 
@@ -75,7 +86,7 @@ Only for breaking changes: anything a booth machine can't pick up from the `v1` 
 
 ## Cutting a release
 
-1. **Test the candidate commits, with machine-setup applied.** The candidate is `main` of both destination repos, or a `release/vN` branch for a hotfix (step 5). Before running any update or publication commands, verify each checkout's fetch and push `origin` points to its `octobooth` destination, as in the checks above. Use clean checkouts; do not overwrite local work. On a booth Mac and a Windows machine:
+1. **Validate the candidate commits.** For this migration, complete [Migration release acceptance](#migration-release-acceptance), record both exact SHAs, and proceed to step 2 without executing the machine instructions below. For normal future releases with separately authorized machine testing, apply machine-setup as follows. The candidate is `main` of both destination repos, or a `release/vN` branch for a hotfix (step 5). Before running any update or publication commands, verify each checkout's fetch and push `origin` points to its `octobooth` destination, as in the checks above. Use clean checkouts; do not overwrite local work. On a booth Mac and a Windows machine:
 
    1. Make sure no release is set, so the installer doesn't pin an older tag: `unset BOOTH_RELEASE` (macOS) or `Remove-Item Env:BOOTH_RELEASE -ErrorAction SilentlyContinue` (Windows).
    2. Put both checkouts on the candidate branch and update them:
@@ -125,4 +136,4 @@ Only for breaking changes: anything a booth machine can't pick up from the `v1` 
 
 Never move or delete a full `vX.Y.Z` tag; cut a new one instead. Only the major tag moves.
 
-Templates can't be pinned: GitHub always creates repos from a template's default branch. Template changes are guarded by their PR CI, and step 1 is the check that the current templates work before a release.
+Templates can't be pinned: GitHub always creates repos from a template's default branch. Template changes are guarded by their PR CI. For normal future releases, the separately authorized machine tests in step 1 check the current templates; migration acceptance uses the hosted and remote evidence above without claiming live demo execution.
