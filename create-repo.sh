@@ -665,14 +665,20 @@ remove_advanced_codeql_workflow() {
 # push an empty commit to each PR flagged "trigger_ai_scan" to start the review.
 # Run from the temp clone. Usage: trigger_ai_scan "<number> <branch>"...
 trigger_ai_scan() {
-    local entry
+    local entry state
+    state=$(gh api "repos/$FULL_REPO_NAME/code-scanning/ai-scan" \
+        -H "X-GitHub-Api-Version: $AI_SCAN_API_VERSION" --jq '.pr_scan' 2>/dev/null) || state=""
+    if [ "$state" != "enabled" ]; then
+        echo "⚠️  Skipping AI Scan trigger commits: pull request scanning is not enabled (current state: ${state:-unknown})."
+        return 0
+    fi
     for entry in "$@"; do
         echo "🤖 Pushing a commit to PR #${entry%% *} to trigger AI code scanning..."
         git checkout --quiet "${entry#* }"
         git commit --allow-empty -m "chore: trigger AI code scanning" --quiet
         git_push origin "${entry#* }" --quiet
     done
-    echo "✅ AI code scanning triggered; findings usually appear within 10 minutes"
+    echo "✅ AI Scan trigger commits pushed; check the PRs for findings"
 }
 
 # AI Scan only reviews PRs opened while code scanning is on, which for advanced

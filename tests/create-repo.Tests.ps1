@@ -16,6 +16,7 @@ $testState = [pscustomobject]@{
     SetupState = 'configured'; SetupLanguages = @('actions'); SetupPending = $null; SetupLag = 0
     SetupRevertOnce = $false; SetupPatchFailure = $false; ConfigStatusPolls = 0
     PrBranches = @{}; PrScans = 'start'; ForcePushed = $null; LanguagesFailure = $false; AdvancedWorkflow = 'codeql-advanced.yml'
+    AiScanState = 'enabled'; AiScanReadFailure = $false
 }
 Remove-Item Env:DEMO_NO_BROWSER -ErrorAction SilentlyContinue
 # Behave the same locally and in CI: the script skips browsers under Actions and
@@ -120,6 +121,14 @@ function gh {
     if ($arguments[0] -eq 'api' -and $arguments[1] -like '*/languages') {
         if ($testState.LanguagesFailure) { $global:LASTEXITCODE = 1; return }
         return @('PHP', 'TypeScript', 'Makefile')
+    }
+    if ($arguments[0] -eq 'api' -and $arguments[1] -eq '--method' -and $arguments[3] -like '*/code-scanning/ai-scan') {
+        if ($testState.AiScanState -ne 'enabled') { $global:LASTEXITCODE = 1 }
+        return
+    }
+    if ($arguments[0] -eq 'api' -and $arguments[1] -like '*/code-scanning/ai-scan') {
+        if ($testState.AiScanReadFailure) { $global:LASTEXITCODE = 1; return }
+        return $testState.AiScanState
     }
     if ($arguments[0] -eq 'api' -and $arguments[1] -like '*/code-scanning/default-setup') {
         if ($arguments -contains 'PATCH') {
@@ -316,7 +325,7 @@ try {
         'repo-only', 'security-prs', 'security-prs-v4', 'security-prs-detect-languages', 'security-prs-languages-lag',
         'security-prs-setup-timeout', 'security-prs-setup-patch-failure', 'security-prs-bad-languages',
         'security-prs-missed-scan', 'security-prs-scan-never', 'security-prs-config-stuck', 'security-prs-languages-failure',
-        'security-prs-no-ai-trigger', 'security-prs-bad-ai-trigger',
+        'security-prs-no-ai-trigger', 'security-prs-bad-ai-trigger', 'security-prs-ai-disabled', 'security-prs-ai-unreadable',
         'security-prs-no-advanced-workflow', 'security-prs-custom-workflow', 'security-prs-bad-workflow', 'issue-codespace', 'branch-codespace',
         'login', 'invalid-selection', 'no-machine', 'nested-body',
         'missing-template', 'missing-body', 'empty-prs', 'unknown-workflow',
@@ -371,6 +380,8 @@ try {
         $testState.PrScans = 'start'
         $testState.LanguagesFailure = $false
         $testState.AdvancedWorkflow = 'codeql-advanced.yml'
+        $testState.AiScanState = 'enabled'
+        $testState.AiScanReadFailure = $false
         $testState.ForcePushed = New-Object 'System.Collections.Generic.List[string]'
         $testState.Opened = New-Object 'System.Collections.Generic.List[string]'
         $testState.NpmCalls = New-Object 'System.Collections.Generic.List[object]'
@@ -407,6 +418,8 @@ try {
                 $config.repos[1].prs[1].PSObject.Properties.Remove('trigger_ai_scan')
                 $config.repos[1].PSObject.Properties.Remove('ai_scan')
             }
+            'security-prs-ai-disabled' { $selection = '2'; $testState.AiScanState = 'disabled' }
+            'security-prs-ai-unreadable' { $selection = '2'; $testState.AiScanReadFailure = $true }
             'security-prs-no-advanced-workflow' { $selection = '2'; $testState.AdvancedWorkflow = $null }
             'security-prs-custom-workflow' {
                 $selection = '2'
@@ -775,7 +788,8 @@ try {
                 $amends = @(Find-Calls 'git' 'commit --amend --no-edit')
                 Assert ($amends.Count -eq $testState.ForcePushed.Count) 'Every retrigger push should recommit the PR commit first.'
                 # Only the PHP PR sets "trigger_ai_scan", so it alone gets an extra (non-force) push.
-                $wantTrigger = $scenario -ne 'security-prs-no-ai-trigger'
+                $wantAiScan = $scenario -ne 'security-prs-no-ai-trigger'
+                $wantTrigger = $wantAiScan -and $scenario -notin @('security-prs-ai-disabled', 'security-prs-ai-unreadable')
                 $emptyCommits = @(Find-Calls 'git' 'commit --allow-empty -m chore: trigger AI code scanning')
                 Assert ($emptyCommits.Count -eq ([int]$wantTrigger)) "Made $($emptyCommits.Count) AI Scan trigger commits (want $([int]$wantTrigger))."
                 $triggerPushes = @((Find-Calls 'git' 'push origin ').Where({ $_.Arguments[2] -ne 'trunk' }))
@@ -789,8 +803,8 @@ try {
                     Assert ($testState.Calls.IndexOf($scanPolls[-1]) -lt $commitAt) 'Triggered AI Scan before checking CodeQL on the PRs.'
                 }
                 $aiScanPatch = @(Find-Calls 'gh' "api --method PATCH repos/$($create.Arguments[2])/code-scanning/ai-scan")
-                Assert ($aiScanPatch.Count -eq ([int]$wantTrigger)) "Changed the AI Scan setting $($aiScanPatch.Count) times (want $([int]$wantTrigger))."
-                if ($wantTrigger) {
+                Assert ($aiScanPatch.Count -eq ([int]$wantAiScan)) "Changed the AI Scan setting $($aiScanPatch.Count) times (want $([int]$wantAiScan))."
+                if ($wantAiScan) {
                     Assert ($testState.Calls.IndexOf($aiScanPatch[0]) -lt $testState.Calls.IndexOf((Find-Calls 'gh' 'pr create')[0])) 'Enabled AI Scan after opening the PRs.'
                 }
                 $workflowFile = if ($scenario -eq 'security-prs-custom-workflow') { 'codeql.yml' } else { 'codeql-advanced.yml' }

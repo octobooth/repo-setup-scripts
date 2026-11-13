@@ -729,13 +729,22 @@ function Remove-AdvancedCodeQLWorkflow {
 function Invoke-AiScanTrigger {
     param([object[]]$PullRequests)
 
+    $state = "$(@(Invoke-GhQuiet api "repos/$fullRepoName/code-scanning/ai-scan" `
+        -H "X-GitHub-Api-Version: $aiScanApiVersion" --jq '.pr_scan')[-1])".Trim()
+    if ($LASTEXITCODE -ne 0) { $state = 'unknown' }
+    if (-not $state) { $state = 'unknown' }
+    if ($state -ne 'enabled') {
+        Write-Warning "Skipping AI Scan trigger commits: pull request scanning is not enabled (current state: $state)."
+        return
+    }
+
     foreach ($pr in $PullRequests) {
         Write-Host "Pushing a commit to PR #$($pr.Number) to trigger AI code scanning..."
         Invoke-Native 'git' @('checkout', '--quiet', $pr.Branch) | Out-Host
         Invoke-Native 'git' @('commit', '--allow-empty', '-m', 'chore: trigger AI code scanning', '--quiet') | Out-Host
         Invoke-GitPush @('origin', $pr.Branch, '--quiet')
     }
-    Write-Host 'AI code scanning triggered; findings usually appear within 10 minutes.'
+    Write-Host 'AI Scan trigger commits pushed; check the PRs for findings.'
 }
 
 # CodeQL default setup languages: the entry's "code_scanning_languages", else the
