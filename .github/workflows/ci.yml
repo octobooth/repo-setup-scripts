@@ -102,6 +102,8 @@ jobs:
         run: bash -n create-repo.sh && bash -n .github/extensions/demo-launcher/install.sh
       - name: Smoke test create-repo.sh --help
         run: bash create-repo.sh --help > /dev/null
+      - name: Test Bash cleanup preview
+        run: node --test tests/cleanup-entrypoints.test.mjs
 
   lint-node:
     name: Lint Demo Launcher
@@ -110,7 +112,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Parse Demo Launcher modules
         run: |
-          for file in .github/extensions/demo-launcher/*.mjs .github/extensions/demo-launcher-loader/*.mjs; do
+          for file in scripts/*.mjs .github/extensions/demo-launcher/*.mjs .github/extensions/demo-launcher-loader/*.mjs; do
             node --check "$file"
           done
 
@@ -136,6 +138,8 @@ jobs:
       - name: Run loader tests
         # Copies the loader to temp extension folders with a stub Copilot SDK; install.sh is skipped on Windows.
         run: node --test tests/demo-launcher-loader.test.mjs
+      - name: Test event cleanup policy
+        run: node --test tests/event-cleanup.test.mjs
 
   lint-powershell:
     name: Lint PowerShell

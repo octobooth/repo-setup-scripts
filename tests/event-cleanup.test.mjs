@@ -135,6 +135,21 @@ test("delete failure reports retained scope and fails the operation", () => {
     assert.equal(result.retained.length, 1);
 });
 
+test("event reuse after the first deletion stops the next and preserves partial results", () => {
+    const { state, run } = fixture();
+    const second = { ...state.repo, id: 2, full_name: "octobooth/second" };
+    state.inventory.push(second);
+    state.manifest.events[0].repositories.push({ id: 2, full_name: second.full_name });
+    state.intercept = (_, options) => {
+        if (options.method === "DELETE") state.manifest.events[0].ends_at = "2026-02-01T00:00:00Z";
+    };
+    const result = run({ execute: true });
+    assert.deepEqual(result.deleted, ["octobooth/demo"]);
+    assert.deepEqual(result.failed, ["octobooth/second"]);
+    assert.match(result.retained[0].reason, /Manifest changed during cleanup/);
+    assert.equal(deletes(state).length, 1);
+});
+
 test("event and selected repository filters narrow scope, never widen it", () => {
     const { state, run } = fixture();
     assert.equal(run({ repos: ["octobooth/other"], execute: true }).deleted.length, 0);

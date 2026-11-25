@@ -10,10 +10,12 @@ param(
     [switch]$NoClone,
     # After setup, check out the default branch and serve it on http://localhost:8080 (npm start). Needs Node.js.
     [switch]$Serve,
-    # Delete demo-generated repos owned by -Owner (default: logged-in account) older than -OlderThanHours.
+    # Preview retained and eligible event demo repos; deletion uses the reviewed workflow.
     [switch]$Cleanup,
+    [string]$ControlRepo,
+    [string]$EventId,
+    # Legacy bypass parameters are rejected explicitly.
     [int]$OlderThanHours = 72,
-    # End of event: ignore the age cutoff and delete every demo repo (same as -OlderThanHours 0, with a warning).
     [switch]$All,
     [switch]$DryRun,
     [switch]$Yes
@@ -39,15 +41,11 @@ $nonInteractive = -not [string]::IsNullOrWhiteSpace($Template)
 if ($Cleanup -and ($nonInteractive -or $Serve -or $NoClone)) {
     throw '-Cleanup cannot be combined with -Template, -Serve, or -NoClone.'
 }
-if (-not $Cleanup -and ($DryRun -or $Yes -or $All)) {
-    throw '-DryRun, -Yes, and -All only apply to -Cleanup.'
+if ($All -or $Yes -or $PSBoundParameters.ContainsKey('OlderThanHours')) {
+    throw '-OlderThanHours, -All, and -Yes are not supported. Cleanup requires event end + seven days and recorded DevRel/DRI review; local cleanup is preview-only.'
 }
-if ($All -and $PSBoundParameters.ContainsKey('OlderThanHours')) {
-    throw '-All cannot be combined with -OlderThanHours.'
-}
-if ($All) { $OlderThanHours = 0 }
-if ($OlderThanHours -lt 0) {
-    throw '-OlderThanHours must be zero or more.'
+if (-not $Cleanup -and ($DryRun -or $ControlRepo -or $EventId)) {
+    throw '-DryRun, -ControlRepo, and -EventId only apply to -Cleanup.'
 }
 if ($Serve -and $NoClone) {
     throw '-Serve needs the local clone, so it cannot be combined with -NoClone.'
@@ -320,50 +318,21 @@ function Add-DemoTopic {
     throw "$message Could not delete it either. Tag it with 'gh repo edit $RepoName --add-topic $demoTopic' or delete it with 'gh repo delete $RepoName --yes'."
 }
 
-# Delete demo repos (demo-generated topic) owned by $CleanupOwner older than -OlderThanHours.
-# Never touches repos without the topic.
+# Preview the same reviewed event scope used by the cleanup workflow.
 function Invoke-DemoCleanup {
-    param([string]$CleanupOwner, [string]$CurrentUser)
+    param([string]$CleanupOwner)
 
-    $endpoint = if ($CleanupOwner -eq $CurrentUser) { 'user/repos?affiliation=owner&per_page=100' } else { "orgs/$CleanupOwner/repos?per_page=100" }
-    if ($All) {
-        Write-Warning "-All ignores the age cutoff: every '$demoTopic' repo owned by $CleanupOwner will be deleted, including demos still in use."
-        Write-Host "Looking for all '$demoTopic' repos owned by $CleanupOwner..."
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        throw 'Cleanup preview requires Node.js. No repositories were deleted.'
     }
-    else {
-        Write-Host "Looking for '$demoTopic' repos owned by $CleanupOwner older than $($OlderThanHours)h..."
+    $control = $ControlRepo
+    if (-not $control) {
+        $control = if ($CleanupOwner -eq 'octobooth') { 'octobooth/repo-setup-scripts' } else { "$CleanupOwner/demo-cleanup" }
     }
-    $lines = & gh api --paginate $endpoint --jq '.[] | {full_name, created_at, topics, owner: .owner.login}'
-    if ($LASTEXITCODE -ne 0) { throw "gh api $endpoint failed with exit code $LASTEXITCODE." }
-    $cutoff = [DateTimeOffset]::UtcNow.AddHours(-$OlderThanHours)
-    $candidates = @($lines | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object {
-        $_.owner -eq $CleanupOwner -and @($_.topics) -contains $demoTopic -and [DateTimeOffset]$_.created_at -lt $cutoff
-    })
-
-    if ($candidates.Count -eq 0) {
-        Write-Host 'Nothing to clean up.'
-        return
-    }
-    foreach ($repo in $candidates) { Write-Host "   $($repo.full_name)  (created $($repo.created_at))" }
-    if ($DryRun) {
-        Write-Host "Dry run: would delete $($candidates.Count) repo(s)."
-        return
-    }
-    if (-not $Yes) {
-        $answer = Read-Host "Delete these $($candidates.Count) repo(s)? [y/N]"
-        if ($answer -notmatch '^[Yy]') {
-            Write-Host 'Cancelled.'
-            return
-        }
-    }
-    $failed = 0
-    foreach ($repo in $candidates) {
-        & gh repo delete $repo.full_name --yes
-        if ($LASTEXITCODE -eq 0) { Write-Host "Deleted $($repo.full_name)" } else { $failed++ }
-    }
-    if ($failed -gt 0) {
-        throw "$failed repo(s) could not be deleted. If this is a permissions error, run: gh auth refresh -h github.com -s delete_repo"
-    }
+    $cleanupArgs = @((Join-Path $scriptDirectory 'scripts/event-cleanup.mjs'), '--control-repo', $control, '--owner', $CleanupOwner)
+    if ($EventId) { $cleanupArgs += @('--event', $EventId) }
+    Write-Host "Reviewed cleanup workflow: https://github.com/$control/actions"
+    Invoke-Native 'node' $cleanupArgs | Out-Host
 }
 
 # Fresh booth machines often have no git identity; fall back to the GitHub account's noreply address.
@@ -965,7 +934,7 @@ try {
     if ($Cleanup) {
         $account = Connect-GitHubAccount
         $cleanupOwner = if ($Owner) { $Owner } else { $account.User }
-        Invoke-DemoCleanup $cleanupOwner $account.User
+        Invoke-DemoCleanup $cleanupOwner
         return
     }
     if ($nonInteractive) {

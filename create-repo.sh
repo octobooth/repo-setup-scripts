@@ -24,7 +24,7 @@ PR_SCAN_WAIT_SECONDS="${PR_SCAN_WAIT_SECONDS:-90}"
 usage() {
     cat <<'EOF'
 Usage: create-repo.sh [--template <key>] [--owner <name>] [--no-clone | --serve]
-       create-repo.sh --cleanup [--owner <name>] [--older-than <hours> | --all] [--dry-run] [--yes]
+       create-repo.sh --cleanup [--owner <name>] [--control-repo <owner/repo>] [--event <id>] [--dry-run]
 
   (no args)            Interactive: pick a template from a menu.
   --template <key>     Non-interactive: use the config.json repo entry with this key.
@@ -34,13 +34,13 @@ Usage: create-repo.sh [--template <key>] [--owner <name>] [--no-clone | --serve]
   --no-clone           Skip the permanent clone into ~/repos (useful in CI).
   --serve              After setup, check out the default branch and serve it on
                        http://localhost:8080 (npm start). Needs Node.js.
-  --cleanup            Delete repos with the demo-generated topic owned by --owner
-                       (default: the logged-in account) that are older than --older-than.
-  --older-than <hours> Age cutoff for --cleanup (default: 72).
-  --all                With --cleanup, ignore the age cutoff and delete every demo repo
-                       (end of event). Same as --older-than 0, with a warning.
-  --dry-run            With --cleanup, list what would be deleted.
-  --yes                With --cleanup, skip the confirmation prompt.
+  --cleanup            Preview retained/eligible demo-generated repos for --owner
+                       (default: logged-in account). Deletion uses the reviewed workflow.
+  --control-repo       Repo holding cleanup-events.json and CLEANUP_REVIEWERS.
+                       Default: <owner>/demo-cleanup; octobooth uses octobooth/repo-setup-scripts.
+  --event <id>         Limit the cleanup preview to one recorded event.
+  --dry-run            Explicit preview (cleanup is always read-only here).
+                       --older-than, --all and --yes are rejected.
   -h, --help           Show this help.
 EOF
 }
@@ -59,11 +59,9 @@ NO_CLONE=false
 OWNER_OVERRIDE=""
 SERVE=false
 CLEANUP=false
-OLDER_THAN_HOURS=72
-OLDER_THAN_SET=false
-ALL=false
+CONTROL_REPO=""
+EVENT_ID=""
 DRY_RUN=false
-ASSUME_YES=false
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -80,22 +78,22 @@ while [ "$#" -gt 0 ]; do
             CLEANUP=true
             shift
             ;;
-        --older-than)
+        --control-repo)
             require_value "$1" "${2:-}"
-            OLDER_THAN_HOURS="$2"
-            OLDER_THAN_SET=true
+            CONTROL_REPO="$2"
             shift 2
             ;;
-        --all)
-            ALL=true
-            shift
+        --event)
+            require_value "$1" "${2:-}"
+            EVENT_ID="$2"
+            shift 2
+            ;;
+        --older-than|--all|--yes)
+            echo "❌ $1 is not supported. Cleanup requires event end + seven days and recorded DevRel/DRI review; local cleanup is preview-only."
+            exit 2
             ;;
         --dry-run)
             DRY_RUN=true
-            shift
-            ;;
-        --yes)
-            ASSUME_YES=true
             shift
             ;;
         --template)
@@ -138,17 +136,8 @@ if [ "$CLEANUP" = true ] && { [ -n "$TEMPLATE_KEY" ] || [ "$SERVE" = true ] || [
     echo "❌ --cleanup cannot be combined with --template, --serve, or --no-clone"
     exit 2
 fi
-if [ "$CLEANUP" = false ] && { [ "$DRY_RUN" = true ] || [ "$ASSUME_YES" = true ] || [ "$ALL" = true ]; }; then
-    echo "❌ --dry-run, --yes, and --all only apply to --cleanup"
-    exit 2
-fi
-if [ "$ALL" = true ] && [ "$OLDER_THAN_SET" = true ]; then
-    echo "❌ --all cannot be combined with --older-than"
-    exit 2
-fi
-[ "$ALL" = true ] && OLDER_THAN_HOURS=0
-if ! [[ "$OLDER_THAN_HOURS" =~ ^[0-9]+$ ]]; then
-    echo "❌ --older-than must be a whole number of hours"
+if [ "$CLEANUP" = false ] && { [ "$DRY_RUN" = true ] || [ -n "$CONTROL_REPO" ] || [ -n "$EVENT_ID" ]; }; then
+    echo "❌ --dry-run, --control-repo, and --event only apply to --cleanup"
     exit 2
 fi
 if [ "$SERVE" = true ] && [ "$NO_CLONE" = true ]; then
@@ -1008,62 +997,20 @@ validate_selected_repo() {
     fi
 }
 
-# Delete demo repos (demo-generated topic) owned by $OWNER that are older than
-# $OLDER_THAN_HOURS. Never touches repos without the topic.
+# Preview the same reviewed event scope used by the cleanup workflow.
 run_cleanup() {
-    local endpoint="orgs/$OWNER/repos?per_page=100"
-    [ "$OWNER" = "$CURRENT_USER" ] && endpoint="user/repos?affiliation=owner&per_page=100"
-
-    if [ "$ALL" = true ]; then
-        echo "⚠️  --all ignores the age cutoff: every '$DEMO_TOPIC' repo owned by $OWNER will be deleted, including demos still in use."
-        echo "🧹 Looking for all '$DEMO_TOPIC' repos owned by $OWNER..."
-    else
-        echo "🧹 Looking for '$DEMO_TOPIC' repos owned by $OWNER older than ${OLDER_THAN_HOURS}h..."
-    fi
-    local candidates=()
-    local line
-    while IFS= read -r line; do
-        [ -n "$line" ] && candidates+=("$line")
-    done < <(gh api --paginate "$endpoint" | jq -r \
-        --arg owner "$OWNER" --arg topic "$DEMO_TOPIC" --argjson hours "$OLDER_THAN_HOURS" '
-        .[]
-        | select(.owner.login == $owner)
-        | select((.topics // []) | index($topic))
-        | select((.created_at | fromdateiso8601) < (now - $hours * 3600))
-        | "\(.full_name)  (created \(.created_at))"')
-
-    if [ "${#candidates[@]}" -eq 0 ]; then
-        echo "✅ Nothing to clean up."
-        return
-    fi
-    printf '   %s\n' "${candidates[@]}"
-    if [ "$DRY_RUN" = true ]; then
-        echo "ℹ️  Dry run: would delete ${#candidates[@]} repo(s)."
-        return
-    fi
-    if [ "$ASSUME_YES" != true ]; then
-        local answer=""
-        read -r -p "❓ Delete these ${#candidates[@]} repo(s)? [y/N] " answer || true
-        if [[ ! "$answer" =~ ^[Yy] ]]; then
-            echo "Cancelled."
-            return
-        fi
-    fi
-
-    local failed=0 repo
-    for line in "${candidates[@]}"; do
-        repo="${line%% *}"
-        if gh repo delete "$repo" --yes; then
-            echo "🗑️  Deleted $repo"
-        else
-            failed=$((failed + 1))
-        fi
-    done
-    if [ "$failed" -gt 0 ]; then
-        echo "❌ $failed repo(s) could not be deleted. If this is a permissions error, run:"
-        echo "   gh auth refresh -h github.com -s delete_repo"
+    if ! command -v node > /dev/null; then
+        echo "❌ Cleanup preview requires Node.js. No repositories were deleted."
         exit 1
     fi
+    if [ -z "$CONTROL_REPO" ]; then
+        CONTROL_REPO="$OWNER/demo-cleanup"
+        [ "$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" = "octobooth" ] && CONTROL_REPO="octobooth/repo-setup-scripts"
+    fi
+    local args=(--control-repo "$CONTROL_REPO" --owner "$OWNER")
+    [ -n "$EVENT_ID" ] && args+=(--event "$EVENT_ID")
+    echo "Reviewed cleanup workflow: https://github.com/$CONTROL_REPO/actions"
+    node "$SCRIPT_DIR/scripts/event-cleanup.mjs" "${args[@]}"
 }
 
 # --- Preflight checks ---

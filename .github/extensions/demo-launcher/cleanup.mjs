@@ -1,164 +1,65 @@
-// Cleanup for the Demo Launcher canvas. Finding candidates reuses the scripts'
-// own `--cleanup --dry-run` filter (demo-generated topic + age cutoff), then only
-// the repos the user confirmed are deleted, so a repo created in between is never touched.
-
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { join } from "node:path";
 import { CanvasError } from "@github/copilot-sdk/extension";
 
-const REPOS_DIR = join(homedir(), "repos");
-
-export function createCleanup({ repoRoot, scriptEnv, scriptCommand, gh = "gh", broadcast, onRepoDeleted, log }) {
+export function createCleanup({ repoRoot, scriptEnv, gh = "gh", broadcast }) {
+    const idle = () => ({ status: "idle", owner: null, controlRepo: null, candidates: [], retained: [], error: null, workflowUrl: null });
     let state = idle();
+    const publish = () => broadcast("cleanup", state);
 
-    function idle() {
-        return { status: "idle", owner: null, olderThanHours: 72, candidates: [], deleted: [], failed: [], log: "", error: null, needsDeleteScope: false };
-    }
-
-    function publish() {
-        broadcast("cleanup", state);
-    }
-
-    function append(text) {
-        state.log = (state.log + text).slice(-50_000);
-    }
-
-    function localClone(fullName) {
-        const path = resolve(REPOS_DIR, fullName.split("/")[1]);
-        if (!path.startsWith(REPOS_DIR + sep) || !existsSync(join(path, ".git"))) return null;
-        const remote = spawnSync("git", ["-C", path, "remote", "get-url", "origin"], { encoding: "utf8" });
-        const url = (remote.stdout || "").trim().replace(/\.git$/, "").toLowerCase();
-        return url.endsWith(`/${fullName.toLowerCase()}`) || url.endsWith(`:${fullName.toLowerCase()}`) ? path : null;
-    }
-
-    // true/false for classic OAuth tokens; null when scopes can't be read (e.g. fine-grained tokens).
-    function hasDeleteScope() {
-        const out = spawnSync(gh, ["api", "-i", "user"], { env: scriptEnv(), encoding: "utf8", timeout: 15000 });
-        const header = (out.stdout || "").match(/^x-oauth-scopes:(.*)$/im);
-        if (!header) return null;
-        return header[1].split(",").map((x) => x.trim()).includes("delete_repo");
-    }
-
-    function run(cmd, args, env) {
-        return new Promise((done) => {
-            const child = spawn(cmd, args, { cwd: repoRoot, env, stdio: ["ignore", "pipe", "pipe"] });
-            let out = "";
-            const onData = (c) => {
-                out += c;
-                append(c.toString());
-                publish();
-            };
-            child.stdout.on("data", onData);
-            child.stderr.on("data", onData);
-            child.on("error", (e) => {
-                const msg = e.code === "ENOENT" ? `${cmd} not found. Install it or add its folder to PATH (PATH: ${env?.PATH || ""})` : e.message;
-                append(`❌ ${msg}\n`);
-                publish();
-                done({ code: null, out: out + msg });
-            });
-            child.on("close", (code) => done({ code, out }));
-        });
-    }
-
-    async function preview({ owner, olderThanHours = 72 } = {}) {
-        if (state.status === "previewing" || state.status === "deleting") throw new CanvasError("busy", "Cleanup is already running.");
-        const hours = Number(olderThanHours);
-        if (!Number.isInteger(hours) || hours < 0) throw new CanvasError("invalid_options", "olderThanHours must be a whole number ≥ 0.");
-        owner = owner?.trim() || null;
-        state = { ...idle(), status: "previewing", owner, olderThanHours: hours };
+    async function preview({ owner, controlRepo, event, olderThanHours } = {}) {
+        if (state.status === "previewing") throw new CanvasError("busy", "Cleanup preview is already running.");
+        if (olderThanHours !== undefined) throw new CanvasError("invalid_options", "Age cutoffs cannot bypass event retention and recorded review. Use a control repository and event.");
+        state = { ...idle(), status: "previewing" };
         publish();
-
-        const { cmd, args } = scriptCommand({
-            sh: ["--cleanup", "--dry-run", "--older-than", String(hours), ...(owner ? ["--owner", owner] : [])],
-            win: ["-Cleanup", "-DryRun", "-OlderThanHours", String(hours), ...(owner ? ["-Owner", owner] : [])],
-        });
-        const { code, out } = await run(cmd, args, scriptEnv());
-        if (code !== 0) {
-            state.status = "error";
-            state.error = `Finding repos failed (exit ${code ?? "?"}). See the log.`;
-            publish();
-            return state;
-        }
-        const resolvedOwner = out.match(/repos owned by (\S+) older than/)?.[1];
-        state.owner = resolvedOwner || owner;
-        state.isOrg = false;
-        if (state.owner) {
-            const who = spawnSync(gh, ["api", `users/${state.owner}`, "--jq", ".type"], { env: scriptEnv(), encoding: "utf8" });
-            state.isOrg = (who.stdout || "").trim() === "Organization";
-        }
-        state.candidates = [...out.matchAll(/^\s+([\w.-]+\/[\w.-]+)\s+\(created (\S+)\)\s*$/gm)].map((m) => ({
-            repo: m[1],
-            createdAt: m[2],
-            clonePath: localClone(m[1]),
-        }));
-        state.canDelete = hasDeleteScope();
-        state.needsDeleteScope = state.canDelete === false;
-        state.status = "preview";
-        publish();
-        return state;
-    }
-
-    async function remove({ repos, removeClones = false } = {}) {
-        if (state.status === "deleting") throw new CanvasError("busy", "Already deleting repos.");
-        if (state.status !== "preview" && state.status !== "done") throw new CanvasError("no_preview", "Find repos to clean up first.");
-        const allowed = new Map(state.candidates.map((c) => [c.repo, c]));
-        const selected = (repos ?? [...allowed.keys()]).filter((r) => allowed.has(r));
-        if (!selected.length) throw new CanvasError("nothing_selected", "No repos from the preview were selected.");
-
-        state.canDelete = hasDeleteScope();
-        if (state.canDelete === false) {
-            state.needsDeleteScope = true;
-            publish();
-            throw new CanvasError("missing_scope", "Your gh login can't delete repos yet. Run: gh auth refresh -h github.com -s delete_repo");
-        }
-        state.needsDeleteScope = false;
-        state.status = "deleting";
-        state.deleted = [];
-        state.failed = [];
-        append(`\n🗑️  Deleting ${selected.length} repo(s)...\n`);
-        publish();
-
-        const env = scriptEnv();
-        for (const repo of selected) {
-            const { code, out } = await run(gh, ["repo", "delete", repo, "--yes"], env);
-            if (code === 0) {
-                state.deleted.push(repo);
-                append(`🗑️  Deleted ${repo}\n`);
-                onRepoDeleted(repo);
-                const clone = allowed.get(repo).clonePath;
-                if (removeClones && clone) {
-                    try {
-                        rmSync(clone, { recursive: true, force: true });
-                        append(`📁 Removed local clone ${clone}\n`);
-                    } catch (e) {
-                        append(`⚠️  Could not remove ${clone}: ${e.message}\n`);
-                    }
-                }
-            } else {
-                state.failed.push(repo);
-                append(`❌ Could not delete ${repo} (exit ${code ?? "?"})${out.trim() ? "" : ": no output from gh"}\n`);
-                if (/delete_repo/.test(out)) state.needsDeleteScope = true;
+        try {
+            const env = scriptEnv();
+            if (!owner?.trim()) {
+                const user = spawnSync(gh, ["api", "user", "--jq", ".login"], { env, encoding: "utf8", timeout: 15000 });
+                if (user.error || user.status !== 0 || !user.stdout.trim()) throw new Error("Cannot identify the signed-in gh account; no cleanup scope was assumed.");
+                owner = user.stdout.trim();
             }
-            publish();
+            owner = owner.trim();
+            controlRepo = controlRepo?.trim() || (owner.toLowerCase() === "octobooth" ? "octobooth/repo-setup-scripts" : `${owner}/demo-cleanup`);
+            state.owner = owner;
+            state.controlRepo = controlRepo;
+            const args = [join(repoRoot, "scripts", "event-cleanup.mjs"), "--owner", owner, "--control-repo", controlRepo, "--json"];
+            if (event?.trim()) args.push("--event", event.trim());
+            const result = await new Promise((resolve, reject) => {
+                const child = spawn(process.execPath, args, { cwd: repoRoot, env, stdio: ["ignore", "pipe", "pipe"] });
+                let stdout = "", stderr = "";
+                child.stdout.on("data", (chunk) => { stdout += chunk; });
+                child.stderr.on("data", (chunk) => { stderr += chunk; });
+                child.on("error", reject);
+                child.on("close", (code) => {
+                    try {
+                        const report = JSON.parse(stdout);
+                        if (code !== 0 && !report.error) throw new Error(stderr || `Cleanup preview failed (exit ${code}).`);
+                        resolve(report);
+                    } catch (error) { reject(new Error(`Cleanup preview failed: ${error.message}`)); }
+                });
+            });
+            state.candidates = result.eligible;
+            state.retained = result.retained;
+            state.error = result.error;
+            if (/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9_.-]+$/.test(controlRepo)) state.workflowUrl = `https://github.com/${controlRepo}/actions`;
+            state.status = result.error ? "error" : "preview";
+        } catch (error) {
+            state.status = "error";
+            state.error = error.message;
         }
-        if (state.needsDeleteScope) append("❌ Deleting repos needs the delete_repo scope. Run:\n   gh auth refresh -h github.com -s delete_repo\n");
-        state.status = "done";
-        state.candidates = state.candidates.filter((c) => !state.deleted.includes(c.repo));
         publish();
-        log(`Demo cleanup: deleted ${state.deleted.length}, failed ${state.failed.length}.`, state.failed.length ? "warning" : "info");
         return state;
     }
 
     return {
-        get state() {
-            return state;
-        },
+        get state() { return state; },
         preview,
-        remove,
+        remove() {
+            throw new CanvasError("reviewed_workflow_required", "Local cleanup is preview-only. Use the control repository's reviewed cleanup workflow; event end + seven days and exact-scope DevRel/DRI approval are required. No repositories or local clones were deleted.");
+        },
         reset() {
-            if (state.status === "previewing" || state.status === "deleting") return state;
+            if (state.status === "previewing") return state;
             state = idle();
             publish();
             return state;

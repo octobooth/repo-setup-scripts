@@ -97,12 +97,12 @@
   <div id="runs"><div class="muted">No demos created yet.</div></div>
   <h2>Clean up</h2>
   <div class="cleanup">
-    <div class="muted" style="font-size:12.5px">Deletes repos with the <code>demo-generated</code> topic, like <code>create-repo --cleanup</code>. You pick which ones before anything is deleted.</div>
+    <div class="muted" style="font-size:12.5px">Preview retained and eligible <code>demo-generated</code> repos. Deletion requires event end + seven days and recorded DevRel/DRI review of the exact scope, through the control repository's workflow.</div>
     <div class="options">
       <label>Owner <input type="text" id="cOwner" list="ownerList" placeholder="you (logged-in account)" /></label>
       <datalist id="ownerList"></datalist>
-      <label>Older than <input type="number" id="cHours" min="0" step="1" value="72" /> h</label>
-      <button class="btn" id="cAll" title="Ignore the age limit">Any age</button>
+      <label>Control repo <input type="text" id="cControl" placeholder="owner/demo-cleanup" /></label>
+      <label>Event <input type="text" id="cEvent" placeholder="all recorded events" /></label>
       <button class="btn" id="cFind">Find demo repos</button>
     </div>
     <div id="cBody"></div>
@@ -303,61 +303,26 @@ async function copySeed(id, index = 0) {
 }
 
 let cleanup = null;
-let armed = false;
-const unchecked = new Set();
 
 function renderCleanup() {
   const c = cleanup; if (!c) return;
-  const busy = c.status === "previewing" || c.status === "deleting";
+  const busy = c.status === "previewing";
   $("cFind").disabled = busy;
   $("cFind").innerHTML = c.status === "previewing" ? `<span class="spinner"></span> Finding…` : "Find demo repos";
   let html = "";
   if (c.status === "error") html += `<div class="warn">❌ ${esc(c.error)}</div>`;
-  if (["preview", "deleting", "done"].includes(c.status)) {
-    const who = esc(c.owner || "you");
-    const cutoff = c.olderThanHours === 0 ? "of any age" : `older than ${c.olderThanHours}h`;
-    if (c.deleted.length) html += `<div style="margin-top:8px">🗑️ Deleted ${c.deleted.length} repo(s).</div>`;
-    if (c.failed.length) html += `<div class="warn">❌ ${c.failed.length} could not be deleted: ${c.failed.map(esc).join(", ")}</div>`;
-    if (c.needsDeleteScope) html += `<div class="warn">🔑 Your <code>gh</code> login can't delete repos yet. In a terminal run <code>gh auth refresh -h github.com -s delete_repo</code>, then click Delete again.</div>`;
-    if (!c.candidates.length) html += `<div class="muted" style="margin-top:8px">✅ No demo repos owned by ${who} ${cutoff}${c.deleted.length ? " left" : ""}.</div>`;
-    else {
-      const sel = c.candidates.filter((x) => !unchecked.has(x.repo));
-      const clones = sel.filter((x) => x.clonePath).length;
-      html += `<div style="margin:10px 0 4px"><strong>${c.candidates.length}</strong> demo repo(s) owned by ${who} ${cutoff}:</div>`;
-      if (c.isOrg) html += `<div class="warn">⚠️ ${who} is an organization: this list includes demos created by other booths and ChatOps.</div>`;
-      html += c.candidates.map((x) => `<label class="cand"><input type="checkbox" data-repo="${esc(x.repo)}" ${unchecked.has(x.repo) ? "" : "checked"} ${busy ? "disabled" : ""}/>
-        <a href="https://github.com/${esc(x.repo)}" target="_blank" style="color:var(--true-color-blue,#0969da);text-decoration:none">${esc(x.repo)}</a>
-        <span class="muted" style="font-size:12px">${new Date(x.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}${x.clonePath ? " · local clone" : ""}</span></label>`).join("");
-      html += `<div class="options">
-        <label><input type="checkbox" id="cClones" ${busy ? "disabled" : ""}/> Also delete local clones (${clones})</label>
-        <button class="btn danger" id="cDelete" ${busy || !sel.length ? "disabled" : ""}>${c.status === "deleting" ? `<span class="spinner"></span> Deleting…` : armed ? `Click again to delete ${sel.length} repo(s)` : `Delete ${sel.length} repo(s)…`}</button>
-      </div>`;
-    }
+  if (["preview", "error"].includes(c.status)) {
+    html += `<div style="margin:10px 0"><strong>${c.candidates.length}</strong> eligible; <strong>${c.retained.length}</strong> retained. Preview only; nothing deleted.</div>`;
+    html += c.candidates.map((x) => `<div class="cand">${esc(x.repo)} — eligible for event ${esc(x.event)}</div>`).join("");
+    html += c.retained.map((x) => `<div class="cand">${esc(x.repo)} — ${esc(x.reason)}</div>`).join("");
+    if (c.workflowUrl) html += `<a class="btn" href="${esc(c.workflowUrl)}" target="_blank" rel="noopener noreferrer">Open reviewed cleanup workflow</a>`;
   }
-  if (c.log) html += `<details ${c.status === "error" || c.failed.length ? "open" : ""}><summary>Log</summary><pre class="log">${esc(c.log)}</pre></details>`;
-  const keepClones = $("cClones")?.checked;
   $("cBody").innerHTML = html;
-  if ($("cClones") && keepClones) $("cClones").checked = true;
 }
 
-$("cAll").addEventListener("click", () => { $("cHours").value = 0; });
 $("cFind").addEventListener("click", async () => {
-  armed = false; unchecked.clear();
-  try { await post("/api/cleanup/preview", { owner: $("cOwner").value.trim() || undefined, olderThanHours: Number($("cHours").value || 0) }); }
+  try { await post("/api/cleanup/preview", { owner: $("cOwner").value.trim() || undefined, controlRepo: $("cControl").value.trim() || undefined, event: $("cEvent").value.trim() || undefined }); }
   catch (e) { toast(e.message); }
-});
-$("cBody").addEventListener("change", (e) => {
-  const repo = e.target.dataset?.repo; if (!repo) return;
-  e.target.checked ? unchecked.delete(repo) : unchecked.add(repo);
-  armed = false; renderCleanup();
-});
-$("cBody").addEventListener("click", async (e) => {
-  if (e.target.id !== "cDelete") return;
-  if (!armed) { armed = true; renderCleanup(); setTimeout(() => { if (armed) { armed = false; renderCleanup(); } }, 5000); return; }
-  armed = false;
-  const repos = cleanup.candidates.map((x) => x.repo).filter((r) => !unchecked.has(r));
-  try { await post("/api/cleanup/delete", { repos, removeClones: !!$("cClones")?.checked }); }
-  catch (err) { toast(err.message); }
 });
 
 async function load() {
