@@ -386,19 +386,8 @@ function findRun(id) {
 const cleanup = createCleanup({
     repoRoot: REPO_ROOT,
     scriptEnv,
-    scriptCommand,
     gh: GH,
     broadcast,
-    onRepoDeleted(repo) {
-        for (const r of allRuns()) {
-            if (r.result.repo?.toLowerCase() === repo.toLowerCase() && !r.result.deleted) {
-                r.result.deleted = true;
-                store.touch(r);
-                broadcast("run", summary(r));
-            }
-        }
-    },
-    log: (message, level) => chatLog(message, { level }),
 });
 
 // ---------- follow-ups ----------
@@ -785,19 +774,20 @@ const session = await joinSession({
                 },
                 {
                     name: "cleanup_preview",
-                    description: "List demo-generated repos older than the cutoff that cleanup would delete (shown in the canvas).",
+                    description: "Preview retained and eligible event demo repos using live event metadata and recorded review. No deletion.",
                     inputSchema: {
                         type: "object",
                         properties: {
                             owner: { type: "string", description: "Account or org; defaults to the logged-in account." },
-                            olderThanHours: { type: "integer", minimum: 0, description: "Age cutoff in hours (default 72; 0 = all)." },
+                            controlRepo: { type: "string", description: "Repo holding cleanup-events.json and CLEANUP_REVIEWERS; defaults to owner/demo-cleanup (octobooth/repo-setup-scripts for octobooth)." },
+                            event: { type: "string", description: "Optional event ID; only narrows the reviewed scope." },
                         },
                     },
                     handler: async (ctx) => cleanup.preview(ctx.input || {}),
                 },
                 {
                     name: "cleanup_delete",
-                    description: "Delete repos from the current cleanup preview. Only call after the user confirmed the list.",
+                    description: "Local deletion is unavailable. Returns guidance to the reviewed cleanup workflow; never deletes repos or clones.",
                     inputSchema: {
                         type: "object",
                         properties: {

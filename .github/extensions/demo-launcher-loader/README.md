@@ -45,4 +45,6 @@ A **repository: repo-setup-scripts** "Demo Launcher" is fine; that's the project
 
 It imports `.github/extensions/demo-launcher/extension.mjs` from there, so `git pull` updates the launcher; you don't need to reinstall. If the checkout is missing, the loader still registers a **Demo Launcher** canvas that says where to clone the repo.
 
+The launcher's **Clean up** section previews [event-aware retained and eligible scope](../../../README.md#cleaning-up) and links to the reviewed workflow. Update the loaded checkout and reload extensions or restart the app to pick up this behavior. Updating the loader does not deploy cleanup workflow copies or enable schedules; follow the [cleanup rollout](../../../README.md#cleanup-rollout).
+
 In a session inside a repo that ships its own Demo Launcher (this repo or a fork), the loader does nothing and lets that copy provide the canvas.

@@ -62,8 +62,8 @@ Run what CI runs ([`ci.yml`](.github/workflows/ci.yml) is the source of truth; s
 bash -n create-repo.sh && bash -n .github/extensions/demo-launcher/install.sh
 shellcheck --severity=warning -x create-repo.sh .github/extensions/demo-launcher/install.sh
 bash create-repo.sh --help > /dev/null
-for f in .github/extensions/demo-launcher/*.mjs .github/extensions/demo-launcher-loader/*.mjs; do node --check "$f"; done
-node --test tests/run-store.test.mjs tests/demo-launcher.test.mjs tests/demo-launcher-loader.test.mjs
+for f in scripts/*.mjs .github/extensions/demo-launcher/*.mjs .github/extensions/demo-launcher-loader/*.mjs; do node --check "$f"; done
+node --test tests/run-store.test.mjs tests/demo-launcher.test.mjs tests/demo-launcher-loader.test.mjs tests/event-cleanup.test.mjs tests/cleanup-entrypoints.test.mjs
 pwsh -NoProfile -File tests/create-repo.Tests.ps1
 pwsh -NoProfile -Command "if (Invoke-ScriptAnalyzer -Path ./create-repo.ps1 -Settings ./PSScriptAnalyzerSettings.psd1) { exit 1 }"
 ```
@@ -76,7 +76,7 @@ End to end (creates a real repo in the signed-in account, or the org for org-pin
 DEMO_NO_BROWSER=1 bash create-repo.sh --template <key> --no-clone
 ```
 
-Live demos and cleanup are not migration validation; run them only when separately authorized. Every demo repo gets the `demo-generated` topic, and `create-repo.sh --cleanup` / `-Cleanup` deletes those older than 72 hours (always `--dry-run` first). `--all` or `--older-than 0` deletes **every** demo the owner has, including ones in use, so don't run them on `octobooth` or a booth account during an event. See [README: Cleaning up](README.md#cleaning-up).
+Live demos and cleanup are not migration validation; run them only when separately authorized. Every demo repo gets the `demo-generated` topic. `create-repo.sh --cleanup` / `-Cleanup` and the canvas are preview-only. The shared [event cleanup engine](scripts/event-cleanup.mjs) requires event end plus 168 hours, exact repository identities, and a designated DevRel/DRI's approval of the current manifest at the merged PR's final head. Age/all/yes bypasses are rejected. Missing records or failed API reads retain resources. See [README: Cleaning up](README.md#cleaning-up) and [rollout requirements](README.md#cleanup-rollout).
 
 ## Launcher gotchas
 

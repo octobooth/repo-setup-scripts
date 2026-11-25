@@ -208,11 +208,11 @@ ChatOps always creates repos in the org, because App tokens can't create repos i
 
 ### Cleanup and the `demo-generated` topic
 
-Every repo the scripts create gets the `demo-generated` topic. Cleanup only deletes repos that have it **and** are older than the cutoff (72 hours by default):
+Every repo the scripts create gets the `demo-generated` topic. Cleanup requires a recorded event end plus 168 hours and exact-scope approval from an explicitly designated DevRel/DRI. Missing associations, invalid metadata, stale reviews, and API failures retain resources; age/all overrides are rejected. See the [event record](../README.md#event-cleanup-record), [review procedure](../README.md#review-and-run-cleanup), and [rollout requirements](../README.md#cleanup-rollout).
 
-- **Any owner:** the launcher's **Clean up** section, or `bash ./create-repo.sh --cleanup [--owner <name>]`. Needs the `delete_repo` scope.
+- **Any owner:** the launcher's **Clean up** section, or `bash ./create-repo.sh --cleanup --owner <name> --control-repo <owner/repo>`. These are read-only previews requiring Node.js and authenticated `gh` with access to the control record, reviews, reviewer variable, and permissions.
 - **Your org, automatically:** `cleanup-demos.yml` is configured for 08:00 UTC once ChatOps is set up and separately enabled. It does not run on the destination while that workflow is disabled.
-- **Personal accounts:** nothing in this repo reaches them on a schedule. Run `--cleanup` on each machine, or add a scheduled workflow in each account (the `octobooth-*` accounts use a private `demo-cleanup` repo for this).
+- **Personal accounts:** nothing in this repo reaches them on a schedule. Their private `demo-cleanup` workflows must be deliberately updated to invoke the shared public engine at a reviewed immutable revision. Existing copies are not updated by merging this repository.
 
 ### Presenter machines and machine-setup
 

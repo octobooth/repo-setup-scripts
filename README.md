@@ -33,7 +33,7 @@ Do this once per machine (macOS):
    ```
 
    - `codespace` lets Tailspin Toys create its Codespace.
-   - `delete_repo` lets the launcher's **Clean up** (and `--cleanup`) delete old demo repos.
+   - `delete_repo` is needed by account workflow credentials that execute reviewed cleanup; the launcher's **Clean up** and `--cleanup` are read-only previews.
    - The default scopes (`repo`, `read:org`, `gist`) cover everything else. Answer **Yes** to "Authenticate Git" so the scripts can push demo branches over HTTPS.
    - The booth account must be a member of the `octobooth` org and allowed to create repos there. The security demos (`security-octo-supply-v4` and `ai-security`) default to that org; explicit owner overrides still take precedence.
    - The booth account also needs a Copilot seat (for Copilot code review and assigning issues to Copilot) and access to Codespaces (for Tailspin Toys).
@@ -68,7 +68,7 @@ Two demos take too long to create in front of visitors, so create them ahead of 
 - **AI Security** (`ai-security`): about 20 minutes ([checklist](resources/ai-security/ANSWER_KEY.md)).
 - **Security Supply Chain (v4)** (`security-octo-supply-v4`): about 10 minutes ([checklist](resources/security-octo-supply-v4/ANSWER_KEY.md)).
 
-When they're ready, bookmark each demo repo in the browser. Then open the same repo URLs on the other booth machines and bookmark them there too, instead of creating the demos again on every machine. Both default to the `octobooth` org. The [nightly cleanup](#which-cleanup-covers-which-repos) is configured for `demo-generated` repos older than 72 hours but does not run while the cleanup workflow is disabled.
+When they're ready, bookmark each demo repo in the browser. Then open the same repo URLs on the other booth machines and bookmark them there too, instead of creating the demos again on every machine. Both default to the `octobooth` org. The [nightly cleanup](#which-cleanup-covers-which-repos) requires event end plus seven days and recorded DevRel/DRI review, and does not run while the cleanup workflow is disabled.
 
 ## Releases
 
@@ -159,7 +159,7 @@ To install it outside `octobooth`, see [Run the Demo Launcher in your own org](d
   The card also links to the repo's pull request list and has a **🔑 Presenter answer key** button. The button opens `resources/<key>/ANSWER_KEY.md` from this repo on your machine (in VS Code if it's installed). The answer key is never copied into demo repos, so keep it off the shared screen.
 - **One-click follow-ups.** **Open session in Copilot app** has Copilot add the repo as a project and open a fresh session. **Open PR session** and **Open issue session** open those items. **Open in VS Code** runs `code <clone>`. The session buttons and **Run with Fusion** need a chat behind the launcher; see [Opened without a chat](#opened-without-a-chat) for what they do otherwise.
 - **Seed prompts.** For demos with a `seed_prompt_file` (like `fusion-blank`) or `seed_prompts` (like `fusion-routing`), the card shows each prompt with **📋 Copy** and **▶ Run with Fusion**. Run with Fusion has Copilot add the repo as a project and start a new autopilot session that runs that prompt on the GitHub Copilot Fusion model (`model: "auto"`, `auto_tier: "hydrafusion"`). With `seed_prompts`, the session name starts with the prompt's label (for example `[Fusion - Cascade] Safe orders errors`), so you can run them all and compare the sessions side by side. A **Fusion tier** choice above the prompts (**High**, the default, or **Max**) applies to every Run with Fusion button on that card. High is the model picker's Standard/High tier (`auto_tier: "hydrafusion"`; the picker uses that one id for both), and Max is `auto_tier: "hydrafusion-max"`. Max sessions are named `[Fusion Max - <label>] …`, or `[Fusion Max] …` for a single unlabeled prompt. The `run_with_fusion` canvas action takes the same optional `tier` (`"high"` or `"max"`).
-- **Clean up.** This works like `--cleanup`. Pick an owner and an age cutoff (default 72 hours, or **Any age**), review the matching `demo-generated` repos, and untick any you want to keep. Then delete the rest, optionally with their clones in `~/repos`. Deleting needs the `delete_repo` scope.
+- **Clean up.** This works like `--cleanup`: choose an owner, control repository, and optional event ID to preview eligible and retained repos with reasons. Select **Open reviewed cleanup workflow** to continue. Local previews never delete repositories or clones; [event metadata and recorded review](#event-cleanup-record) govern eligibility.
 
 Runs use your stored `gh auth login`, not any `GH_TOKEN` the app injects, so they have the same scopes as a terminal run. When they do, git pushes also go through `gh auth git-credential`, so git and `gh` always act as the same account even if the app is signed in as someone else. Nothing extra to set up: this only changes the environment of the scripts the launcher starts, not your git config or keychain. Run history survives restarts. It's kept in `~/.copilot/extensions/demo-launcher/artifacts/runs.json` and shared by every open launcher (each chat runs its own copy of the extension), so a demo created from one panel shows up in the others. **Clear history** clears finished runs in all of them. A run is only marked *interrupted* when the launcher that started it has exited; cancel a run from the panel or chat that started it. The panel is a plain loopback web page, so its URL also works in a browser, including VS Code's Simple Browser. The port changes each time the extension restarts.
 
@@ -275,8 +275,8 @@ Copilot can drive the canvas directly with these actions:
 - `launch` (`template`, `owner`, `noClone`, `openBrowser`)
 - `get_run` and `list_runs`
 - `cancel`
-- `cleanup_preview` (`owner`, `olderThanHours`)
-- `cleanup_delete` (`repos`, `removeClones`)
+- `cleanup_preview` (`owner`, `controlRepo`, `event`)
+- `cleanup_delete` returns an explicit preview-only error and directs operators to the reviewed workflow; it never deletes repos or clones.
 
 For example: "launch octocart in the demo launcher and tell me when Copilot has reviewed the PRs."
 
@@ -286,7 +286,7 @@ For example: "launch octocart in the demo launcher and tell me when Copilot has 
 | --- | --- |
 | [`extension.mjs`](.github/extensions/demo-launcher/extension.mjs) | Registers the canvas and its actions, runs `create-repo` in the background, parses its output, and serves the panel on a loopback port |
 | [`ui.html`](.github/extensions/demo-launcher/ui.html) | The panel UI |
-| [`cleanup.mjs`](.github/extensions/demo-launcher/cleanup.mjs) | The Clean up section (preview and delete through `create-repo --cleanup`) |
+| [`cleanup.mjs`](.github/extensions/demo-launcher/cleanup.mjs) | The Clean up section (shared-engine preview and reviewed workflow link) |
 | [`run-store.mjs`](.github/extensions/demo-launcher/run-store.mjs) | Run history in `runs.json`, shared safely by every launcher process (locked read-merge-write, atomic replace, file watching) |
 | [`../demo-launcher-loader/extension.mjs`](.github/extensions/demo-launcher-loader/extension.mjs) | The user-level loader that `install.sh` writes and that [Install from a URL](#install-from-a-url) installs |
 | [`install.sh`](.github/extensions/demo-launcher/install.sh) | Installs or uninstalls the user-level loader |
@@ -329,26 +329,65 @@ Pages on free personal accounts only works for public repos, so Booth Bingo repo
 
 ## Cleaning up
 
-Delete old demo repos from the logged-in account (or `--owner` / `-Owner`). Only repos with the `demo-generated` topic that are older than the cutoff (default 72 hours) are considered; everything else is left alone. The script lists matches and asks before deleting.
+Preview event demo repos from the logged-in account (or `--owner` / `-Owner`). Only repos with the `demo-generated` topic are considered; untagged resources are untouched. Repositories are retained until **event end plus 168 hours** and a designated DevRel/DRI has approved the exact recorded scope. Creation age is not a deletion criterion. Missing, invalid, ambiguous, or unreviewed metadata retains resources with an explicit result. API failures stop cleanup rather than reporting success.
 
 ```bash
-bash ./create-repo.sh --cleanup [--older-than 72 | --all] [--dry-run] [--yes] [--owner <name>]
+bash ./create-repo.sh --cleanup [--owner <name>] [--control-repo <owner/repo>] [--event <id>] [--dry-run]
 ```
 
 ```powershell
-.\create-repo.ps1 -Cleanup [-OlderThanHours 72 | -All] [-DryRun] [-Yes] [-Owner <name>]
+.\create-repo.ps1 -Cleanup [-Owner <name>] [-ControlRepo <owner/repo>] [-EventId <id>] [-DryRun]
 ```
 
-**End of event:** `--all` / `-All` ignores the age cutoff and deletes every `demo-generated` repo the owner has, including ones created minutes ago. It prints a warning and still asks before deleting unless you pass `--yes` / `-Yes`. Run with `--dry-run` first to check the list.
+Local cleanup is always preview-only and needs Node.js plus authenticated `gh`. `--all`, `--older-than`, and `--yes` (PowerShell: `-All`, `-OlderThanHours`, `-Yes`) are rejected explicitly. The canvas also refuses stale local-delete requests. Local clones are never removed.
 
-Deleting repos needs the `delete_repo` scope. The scripts request it when they log in; for an existing login run `gh auth refresh -h github.com -s delete_repo`.
+The control repository defaults to `<owner>/demo-cleanup` for personal accounts and `octobooth/repo-setup-scripts` for `octobooth`. Other organizations must specify `--control-repo` / `-ControlRepo` or the canvas field. Personal-account previews require authentication as that account so private demos are included. The credential must read control-repository contents, pull requests, reviews, collaborator permissions, and the `CLEANUP_REVIEWERS` Actions variable; a read failure retains resources.
+
+### Event cleanup record
+
+Each owner uses one authoritative control repository for all its event associations. Keep its default-branch [`cleanup-events.json`](cleanup-events.json) in this format:
+
+```json
+{
+  "schema_version": 1,
+  "events": [
+    {
+      "id": "example-event",
+      "ends_at": "2026-12-01T18:00:00Z",
+      "repositories": [
+        { "id": 123456789, "full_name": "example-owner/example-demo" }
+      ],
+      "review_pr": 42
+    }
+  ]
+}
+```
+
+Replace example values with verified event details and GitHub repository IDs. `ends_at` is an exact UTC timestamp (`YYYY-MM-DDTHH:mm:ssZ`); the boundary is inclusive at 168 hours later. Repository IDs and case-insensitive full names must each be unique across the entire manifest. Reusing a repo for another event means replacing its association with the later event, not appending a second association. Publish that reassignment before reuse and pause cleanup while making it; duplicate associations invalidate the manifest and retain everything. Creation does not automatically associate demos with an event.
+
+The control-repository administrator explicitly designates DevRel/DRI reviewers in the Actions repository variable `CLEANUP_REVIEWERS`, a comma-separated list of GitHub logins (for example, `reviewer-one,reviewer-two`). Write access alone is not designation. No local `review=true` flag or workflow confirmation substitutes for review.
+
+### Review and run cleanup
+
+1. Open a PR in the control repository containing the exact event inventory and end timestamp. Set each event's `review_pr` to that PR's actual number, then commit the complete record. Reviewers must inspect the full manifest, including all repository identities.
+2. At or after event end plus 168 hours, a designated DevRel/DRI approves the PR's final head. The approver must currently have write, maintain, or admin permission on the control repository. Merge the PR into its default branch. The current manifest bytes must exactly equal the manifest at the approved PR head; changing any part requires a new matching review. Later changes-requested or dismissed review decisions invalidate that reviewer's approval.
+3. Preview using the launcher or CLI, or manually run **Clean up demos** with `dry_run: true` and an optional `event` ID. Retained results explain missing association, retention, review, or authorization problems. Resolve those records rather than adding an age override.
+4. After separately approved workflow activation, run with `dry_run: false`, or comment `/cleanup [--event ID] --confirm` in this control repository. Commenters need write access. Confirmation authorizes execution only: the event and recorded review gates still apply. Scheduled runs evaluate the same gates.
+
+The shared [Node engine](scripts/event-cleanup.mjs) accepts `--control-repo OWNER/REPO --owner OWNER [--event ID] [--json]`; it defaults to preview. Workflows add `--execute`. It discovers retained resources but only deletes exact identities in the reviewed record. Immediately before each deletion it rereads the authoritative manifest, reviewer designation, review evidence, current permissions, and live repository ID/owner/topic. A changed scope or API failure stops remaining deletions and reports any already completed ones. GitHub does not provide an atomic transaction across these reads and repository deletion: operators must pause cleanup while reassigning resources or changing approvals. Control repositories and repositories named `demo-cleanup` are always protected.
+
+### Cleanup rollout
+
+This source change does not activate enforcement on deployed machines or account workflow copies. Merge the public engine and companion account integration, then deliberately update/reinstall each account's cleanup workflow to its reviewed immutable engine revision. Update the launcher checkout used by each machine and reload extensions or restart the app; no loader reinstall is needed solely for these launcher changes. Historical release tags remain unchanged.
+
+Before enabling any schedule, register real event inventories, designate reviewers, verify the existing credential can perform every required read, and inspect a dry run. The org App additionally needs repository Variables read permission for the reviewer allowlist; no credentials or App permissions are provisioned by this change. Account tokens also need repository-delete permission. Missing permissions fail closed. The org cleanup workflow remains disabled; activation, account-copy deployment, and machine rollout require separate approval. See the [machine-setup playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md).
 
 ### Which cleanup covers which repos
 
 | Where the demo repo lives | How it gets cleaned up |
 | --- | --- |
-| A booth account (`octobooth-1`, `octobooth-2`, …), the default | Each booth account's private `demo-cleanup` repo owns its separate weekly cleanup; this migration does not change those accounts or workflows. Between runs, use `--cleanup` / `-Cleanup` **on that machine**. Administrative resets are separate work in [`octobooth/admin-tasks`](https://github.com/octobooth/admin-tasks); do not run them as migration checks. See the [booth playbook](https://github.com/octobooth/machine-setup/blob/main/docs/booth-playbook.md). |
-| The `octobooth` org (`--owner octobooth`, ChatOps, `security-octo-supply-v4`, `ai-security`) | The [nightly cleanup](.github/workflows/cleanup-demos.yml) is configured for 08:00 UTC and repos older than 72 hours, but the workflow remains disabled. After separately approved activation, `/cleanup [hours] --confirm` or manual dispatch can clean up sooner; `/cleanup --all --confirm` ignores age. |
+| A booth account (`octobooth-1`, `octobooth-2`, …), the default | Its private `demo-cleanup` repository owns the event record and reviewed workflow. Existing account workflow copies require deliberate deployment through [`octobooth/admin-tasks`](https://github.com/octobooth/admin-tasks); this PR does not update them. Local `--cleanup` / `-Cleanup` previews the account scope. |
+| The `octobooth` org (`--owner octobooth`, ChatOps, `security-octo-supply-v4`, `ai-security`) | This repository owns the record and [08:00 UTC workflow](.github/workflows/cleanup-demos.yml), which remains disabled. After separately approved activation, manual, comment, and scheduled runs require the same event end and exact-scope review gates. |
 
 **Recommended booth routine (repos in each booth account):**
 
@@ -360,9 +399,9 @@ gh auth refresh -h github.com -s delete_repo
 git pull
 bash ./create-repo.sh --template booth-bingo
 
-# End of the day (or the next morning): remove that account's demos older than 72h
+# End of the day: preview retained/eligible repos; nothing is deleted locally
 bash ./create-repo.sh --cleanup
-# or, after the event, remove every demo regardless of age: bash ./create-repo.sh --cleanup --all
+# Record event associations, then follow the reviewed workflow after event end + seven days.
 ```
 
 **Org owner override:** add `--owner octobooth` (or `-Owner octobooth`) when creating demos. This requires the booth accounts to be `octobooth` members who are allowed to create repos, including **public** ones (Booth Bingo is public so GitHub Pages works). Do not rely on automatic cleanup while its workflow is disabled.
@@ -440,7 +479,7 @@ The **presenter answer key**, [`resources/octocart/ANSWER_KEY.md`](resources/oct
 4. Assigns the `js/sql-injection` alert to Copilot with `PATCH /repos/{owner}/{repo}/code-scanning/alerts/{n}`, so a draft fix PR is ready by demo time. It assigns `github-agentic-autofix[bot]`, the account the UI's **Assign to Copilot** uses, and falls back to `copilot-swe-agent[bot]`. If both fail, it warns, and you can assign the alert yourself.
 5. Opens "Containerize the supplier portal and deploy it to staging" from [`resources/ai-security/pr-infra`](resources/ai-security/pr-infra): a Dockerfile, a deploy shell script, Terraform, and a PHP health check, none of which CodeQL analyzes. AI Scan doesn't use CodeQL results, but it only reviews PRs opened after code scanning is on. Opening the PR after step 3 guarantees that.
 
-**Pre-bake this demo.** The script takes about 5–10 minutes. AI Scan findings and Copilot's draft PR each take about 10 more minutes, and longer when GitHub is busy. Create it from the launcher before the booth opens, then work through the checklist in the [presenter notes](resources/ai-security/ANSWER_KEY.md). One repo can serve the whole day; nightly cleanup is configured for 72 hours but remains disabled during migration.
+**Pre-bake this demo.** The script takes about 5–10 minutes. AI Scan findings and Copilot's draft PR each take about 10 more minutes, and longer when GitHub is busy. Create it from the launcher before the booth opens, then work through the checklist in the [presenter notes](resources/ai-security/ANSWER_KEY.md). One repo can serve the whole day; [event-aware cleanup](#cleaning-up) requires recorded review and remains disabled during migration.
 
 The script turns CodeQL default setup off and waits (up to 10 minutes; override with `DEFAULT_SETUP_WAIT_SECONDS`) until GitHub reports it off, because default setup can't run alongside the template's advanced workflow. Everything it does needs only admin on the repo it creates, so booth accounts that are org members (not owners) can run it. The org must already allow and enable AI Scan and agentic autofix; verify destination availability separately rather than assuming source settings were copied. Each run uses Code Security AI credits and Actions minutes.
 
@@ -472,7 +511,7 @@ Run all three (each opens its own `[Fusion - <label>] …` session) and compare 
 Two workflows in this repo are configured to create and clean up demos without a booth machine running the script. **New demo and Clean up demos remain disabled; only CI is active.** The descriptions below apply only after separately approved activation and App setup; changing owner strings does not install an App or configure credentials.
 
 - **[New demo](.github/workflows/new-demo.yml)**: run it from the Actions tab and pick a template, or comment `/new-demo <key>` on any issue or PR in this repo. Repos are always created in `octobooth`, because App tokens cannot create repos in personal accounts. It replies with the repo URL and, for stacks, the top PR URL and the game URL (for OctoCart, the pull request list). Only `repo_only`, `blank`, `security_prs`, `stacked_prs`, `code_review_prs`, and `ai_security` templates are allowed, because Codespaces need a user token.
-- **[Clean up demos](.github/workflows/cleanup-demos.yml)**: runs nightly, from the Actions tab (`max_age_hours`, default 72; `dry_run`, default on), or by comment: `/cleanup [hours | --all] [--dry-run | --confirm]`. Comment runs are dry runs unless they include `--confirm`; only the nightly run deletes without opting in. Manual and comment runs need a cutoff of at least 1 hour unless they use the end-of-event override (`--all` in a comment, or the `all` input on the Actions tab), which deletes every demo repo in the org regardless of age and adds a warning to the reply, and the comment must start with exactly `/cleanup`. If some deletions fail, the run continues with the rest, then fails and lists what was and was not deleted. It only deletes repos in `octobooth` that have the `demo-generated` topic **and** are older than the cutoff. It cannot see repos in booth accounts; see [Which cleanup covers which repos](#which-cleanup-covers-which-repos).
+- **[Clean up demos](.github/workflows/cleanup-demos.yml)**: runs nightly, from the Actions tab (`event`, optional; `dry_run`, default on), or by comment `/cleanup [--event ID] [--dry-run | --confirm]`. Comment runs default to preview. Every execution requires [event end plus seven days and recorded exact-scope review](#review-and-run-cleanup); `--confirm` does not grant review. Age and `--all` overrides are rejected. Failures stop remaining deletions and surface completed/retained scope in the run summary. This workflow targets the org only; see [Which cleanup covers which repos](#which-cleanup-covers-which-repos).
 
 Comment commands only run for users with write, maintain, or admin access to this repository.
 
@@ -507,9 +546,10 @@ On macOS or Linux, run the same file with `pwsh -File tests/create-repo.Tests.ps
 
 ```bash
 bash -n create-repo.sh
-for f in .github/extensions/demo-launcher/*.mjs .github/extensions/demo-launcher-loader/*.mjs; do node --check "$f"; done
+for f in scripts/*.mjs .github/extensions/demo-launcher/*.mjs .github/extensions/demo-launcher-loader/*.mjs; do node --check "$f"; done
 node --test tests/run-store.test.mjs   # run history shared across several launcher processes
 node --test tests/demo-launcher.test.mjs tests/demo-launcher-loader.test.mjs   # seed prompts and the loader
+node --test tests/event-cleanup.test.mjs tests/cleanup-entrypoints.test.mjs   # event policy and Bash/workflow preview fixtures
 bash -n .github/extensions/demo-launcher/install.sh
 shellcheck --severity=warning -x create-repo.sh .github/extensions/demo-launcher/install.sh
 ```

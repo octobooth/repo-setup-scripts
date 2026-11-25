@@ -64,13 +64,14 @@ process.exit(0);
 
 // Copies the launcher, config.json, and resources into a temp repo root so a test can use a
 // modified config; the extension reads config.json relative to its own location.
-function runDriver(editConfig = (c) => c, driver = DRIVER) {
+function runDriver(editConfig = (c) => c, driver = DRIVER, prepareRoot = () => {}) {
     const dir = mkdtempSync(join(tmpdir(), "demo-launcher-test-"));
     try {
         const root = join(dir, "repo");
         cpSync(join(ROOT, ".github", "extensions", "demo-launcher"), join(root, ".github", "extensions", "demo-launcher"), { recursive: true });
         cpSync(join(ROOT, "resources"), join(root, "resources"), { recursive: true });
         writeFileSync(join(root, "config.json"), JSON.stringify(editConfig(structuredClone(CONFIG))));
+        prepareRoot(root);
         const extensionUrl = pathToFileURL(join(root, ".github", "extensions", "demo-launcher", "extension.mjs")).href;
         const stub = join(dir, "stub.mjs");
         const hooks = join(dir, "hooks.mjs");
@@ -104,6 +105,50 @@ function runDriver(editConfig = (c) => c, driver = DRIVER) {
 }
 
 const out = runDriver();
+
+test("cleanup canvas previews reviewed scope, exposes failures, and refuses local deletion", () => {
+    const result = runDriver((c) => c, `
+import { register } from "node:module";
+register(process.env.HOOKS_URL);
+await import(process.env.EXTENSION_URL);
+const canvas = globalThis.__canvas;
+const action = (name) => canvas.actions.find((a) => a.name === name).handler;
+const out = {};
+out.preview = await action("cleanup_preview")({ input: { owner: "octobooth", event: "conference" } });
+try { await action("cleanup_delete")({ input: { repos: ["octobooth/demo"], removeClones: true } }); }
+catch (e) { out.deleteError = e.code; }
+try { await action("cleanup_preview")({ input: { owner: "octobooth", olderThanHours: 0 } }); }
+catch (e) { out.ageError = e.code; }
+out.failure = await action("cleanup_preview")({ input: { owner: "octobooth", event: "failed" } });
+console.log("__RESULT__" + JSON.stringify(out));
+process.exit(0);
+`, (root) => {
+        mkdirSync(join(root, "scripts"));
+        writeFileSync(join(root, "scripts", "event-cleanup.mjs"), `
+import assert from "node:assert/strict";
+const args = process.argv.slice(2);
+assert.ok(args.includes("--json"));
+assert.ok(args.includes("octobooth/repo-setup-scripts"));
+assert.ok(!args.includes("--execute"));
+const failed = args.includes("failed");
+console.log(JSON.stringify({
+    eligible: failed ? [] : [{ repo: "octobooth/demo", event: "conference", id: 1 }],
+    retained: [{ repo: "octobooth/unassigned", reason: "Missing exact event association." }],
+    error: failed ? "GitHub API unavailable; retained." : null
+}));
+process.exitCode = failed ? 1 : 0;
+`);
+    });
+    assert.equal(result.preview.status, "preview");
+    assert.equal(result.preview.candidates.length, 1);
+    assert.equal(result.preview.retained.length, 1);
+    assert.equal(result.preview.workflowUrl, "https://github.com/octobooth/repo-setup-scripts/actions");
+    assert.equal(result.deleteError, "reviewed_workflow_required");
+    assert.equal(result.ageError, "invalid_options");
+    assert.equal(result.failure.status, "error");
+    assert.match(result.failure.error, /API unavailable/);
+    assert.equal(result.failure.retained.length, 1);
+});
 const routingConfig = CONFIG.repos.find((r) => r.key === "fusion-routing");
 const promptText = (file) => readFileSync(join(ROOT, file), "utf8").trim();
 const kickoffOf = (prompt) => JSON.parse(prompt.match(/kickoff object \(don't change the prompt text\): (\{.*?\})\./)[1]);

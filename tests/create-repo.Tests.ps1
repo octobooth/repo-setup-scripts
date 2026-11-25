@@ -56,6 +56,13 @@ function npm {
     $global:LASTEXITCODE = 0
 }
 
+function node {
+    $testState.Calls.Add([pscustomobject]@{ Command = 'node'; Arguments = @($args); Location = (Get-Location).Path })
+    $global:LASTEXITCODE = 0
+    'Retained demo-user/unassigned: Missing exact event association.'
+    'Preview only; nothing deleted.'
+}
+
 function gh {
     $arguments = @($args)
     $testState.Calls.Add([pscustomobject]@{ Command = 'gh'; Arguments = $arguments; Location = (Get-Location).Path })
@@ -335,8 +342,8 @@ try {
         'stacked-prs', 'stack-one-layer', 'stack-missing-field', 'stack-api-failure', 'stack-verify-mismatch',
         'non-interactive', 'unknown-template', 'non-interactive-login', 'no-clone-branch',
         'owner-override', 'serve', 'serve-no-clone', 'pages-failure', 'bad-visibility', 'dry-run-without-cleanup', 'cleanup-with-template',
-        'cleanup', 'cleanup-dry-run', 'cleanup-cancel', 'cleanup-org',
-        'cleanup-all', 'cleanup-all-with-age',
+        'cleanup', 'cleanup-dry-run', 'cleanup-org',
+        'cleanup-all', 'cleanup-all-with-age', 'cleanup-yes', 'cleanup-age',
         'code-review-prs', 'code-review-fallback', 'code-review-unsupported', 'code-review-no-clone',
         'ai-security', 'ai-security-no-clone', 'ai-security-not-enabled', 'ai-security-late-rule',
         'ai-security-assign-failure', 'ai-security-assign-fallback', 'ai-security-codeql-failure',
@@ -605,23 +612,24 @@ try {
                 $expectedFailure = 'cannot be combined with -NoClone'
             }
             'dry-run-without-cleanup' { $selection = $null; $scriptArgs = @{ DryRun = $true }; $expectedFailure = 'only apply to -Cleanup' }
-            'cleanup-all' { $selection = $null; $scriptArgs = @{ Cleanup = $true; Yes = $true; All = $true } }
+            'cleanup-all' { $selection = $null; $scriptArgs = @{ Cleanup = $true; All = $true }; $expectedFailure = 'not supported' }
+            'cleanup-yes' { $selection = $null; $scriptArgs = @{ Cleanup = $true; Yes = $true }; $expectedFailure = 'not supported' }
+            'cleanup-age' { $selection = $null; $scriptArgs = @{ Cleanup = $true; OlderThanHours = 0 }; $expectedFailure = 'not supported' }
             'cleanup-all-with-age' {
                 $selection = $null
                 $scriptArgs = @{ Cleanup = $true; All = $true; OlderThanHours = 5 }
-                $expectedFailure = '-All cannot be combined'
+                $expectedFailure = 'not supported'
             }
             'cleanup-with-template' {
                 $selection = $null
                 $scriptArgs = @{ Cleanup = $true; Template = 'booth-bingo' }
                 $expectedFailure = '-Cleanup cannot be combined'
             }
-            'cleanup' { $selection = $null; $scriptArgs = @{ Cleanup = $true; Yes = $true } }
+            'cleanup' { $selection = $null; $scriptArgs = @{ Cleanup = $true } }
             'cleanup-dry-run' { $selection = $null; $scriptArgs = @{ Cleanup = $true; DryRun = $true } }
-            'cleanup-cancel' { $selection = 'n'; $scriptArgs = @{ Cleanup = $true } }
             'cleanup-org' {
                 $selection = $null
-                $scriptArgs = @{ Cleanup = $true; Yes = $true; Owner = 'someone'; OlderThanHours = 1 }
+                $scriptArgs = @{ Cleanup = $true; Owner = 'someone'; ControlRepo = 'someone/control'; EventId = 'conference' }
             }
             'no-clone-branch' {
                 $selection = $null
@@ -682,22 +690,19 @@ try {
         elseif ($scenario -like 'cleanup*') {
             Assert ($null -eq $caught) "$scenario failed: $caught"
             Assert ((Find-Calls 'gh' 'repo create').Count -eq 0) 'Cleanup created a repository.'
-            $list = @(Find-Calls 'gh' 'api --paginate')
-            Assert ($list.Count -eq 1) 'Cleanup did not list repositories.'
+            $preview = @($testState.Calls | Where-Object { $_.Command -eq 'node' })
+            Assert ($preview.Count -eq 1) 'Cleanup did not invoke the shared event engine.'
+            Assert ($preview[0].Arguments -notcontains '--execute') 'Local cleanup attempted execution.'
             $deleted = @((Find-Calls 'gh' 'repo delete') | ForEach-Object { $_.Arguments[2] })
+            Assert ($deleted.Count -eq 0) 'Local cleanup deleted repositories.'
             switch ($scenario) {
                 'cleanup' {
-                    Assert ($list[0].Arguments[2] -like 'user/repos*') 'Own account should use user/repos.'
-                    Assert (($deleted -join ',') -eq 'demo-user/old-demo') "Deleted '$($deleted -join ',')'."
-                }
-                'cleanup-all' {
-                    Assert (($deleted -join ',') -eq 'demo-user/old-demo,demo-user/fresh-demo') "Deleted '$($deleted -join ',')'."
+                    Assert ($preview[0].Arguments -contains 'demo-user/demo-cleanup') 'Missing default account control repo.'
                 }
                 'cleanup-org' {
-                    Assert ($list[0].Arguments[2] -like 'orgs/someone/repos*') 'Other owner should use orgs/<owner>/repos.'
-                    Assert (($deleted -join ',') -eq 'someone/old-demo') "Deleted '$($deleted -join ',')'."
+                    Assert ($preview[0].Arguments -contains 'someone/control') 'Missing explicit control repo.'
+                    Assert ($preview[0].Arguments -contains 'conference') 'Missing event filter.'
                 }
-                default { Assert ($deleted.Count -eq 0) "$scenario deleted '$($deleted -join ',')'." }
             }
             Assert ($testState.Answers.Count -eq 0) "$scenario did not consume the expected input."
         }
